@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Real Streak — your actual GitHub commit streak</title>
+<meta name="description" content="Compute your true GitHub commit streak from your own repos — even when Claude Code or other AI agents take author credit.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0F1319; --surface:#171D26; --surface2:#1D2530; --border:#242E3B;
+    --text:#E9E4DA; --muted:#97A0AC; --accent:#FF8A2A; --accent-soft:#FFC46B;
+    --l0:#1B222C; --l1:#3B2313; --l2:#7A3E14; --l3:#C06318; --l4:#FF8A2A;
+    --danger:#FF6B6B; --ok:#7BD88F;
+    --mono:'JetBrains Mono',ui-monospace,monospace; --sans:'Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16px;line-height:1.55;min-height:100vh}
+  .wrap{max-width:820px;margin:0 auto;padding:28px 18px 80px}
+
+  header{margin:18px 0 30px}
+  .prompt{font-family:var(--mono);font-size:14px;color:var(--muted);letter-spacing:.02em}
+  .prompt .dollar{color:var(--accent)}
+  h1{font-family:var(--mono);font-weight:800;font-size:clamp(30px,7vw,44px);letter-spacing:-.03em;margin-top:6px}
+  h1 .flame{background:linear-gradient(100deg,var(--accent) 20%,var(--accent-soft) 80%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tagline{color:var(--muted);margin-top:8px;max-width:52ch}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px}
+  label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em}
+  .token-row{display:flex;gap:10px}
+  input[type=password],input[type=text]{flex:1;min-width:0;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:var(--mono);font-size:14px;padding:13px 14px;outline:none}
+  input:focus{border-color:var(--accent)}
+  button.primary{background:var(--accent);color:#1A0E02;border:none;border-radius:10px;font-family:var(--mono);font-weight:800;font-size:14px;padding:13px 18px;cursor:pointer;white-space:nowrap}
+  button.primary:hover{background:var(--accent-soft)}
+  button.primary:disabled{opacity:.45;cursor:default}
+  .remember{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;color:var(--muted)}
+  .remember input{accent-color:var(--accent)}
+  .privacy{margin-top:14px;font-size:13px;color:var(--muted);border-left:2px solid var(--border);padding-left:12px}
+  .privacy b{color:var(--text)}
+  details.howto{margin-top:14px}
+  details.howto summary{cursor:pointer;font-size:14px;color:var(--accent-soft)}
+  details.howto ol{margin:10px 0 4px 20px;font-size:14px;color:var(--muted)}
+  details.howto li{margin:4px 0}
+  details.howto code{font-family:var(--mono);font-size:12.5px;background:var(--bg);padding:1px 6px;border-radius:6px}
+
+  #status{margin-top:22px;font-family:var(--mono);font-size:13px;color:var(--muted);min-height:20px;white-space:pre-wrap}
+  #status.err{color:var(--danger)}
+  .bar{height:4px;background:var(--surface2);border-radius:2px;margin-top:10px;overflow:hidden;display:none}
+  .bar i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent-soft));transition:width .3s}
+
+  #results{display:none;margin-top:34px}
+  .stat-hero{text-align:left;padding:26px 22px;background:var(--surface);border:1px solid var(--border);border-radius:14px}
+  .stat-hero .prompt{margin-bottom:2px}
+  .big{font-family:var(--mono);font-weight:800;font-size:clamp(56px,16vw,96px);line-height:1;letter-spacing:-.04em;background:linear-gradient(100deg,var(--accent) 10%,var(--accent-soft) 90%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .big small{font-size:.32em;color:var(--muted);-webkit-text-fill-color:var(--muted);font-weight:600;letter-spacing:0}
+  .substat{margin-top:6px;font-size:14px;color:var(--muted)}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+  .mini{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px}
+  .mini .n{font-family:var(--mono);font-weight:800;font-size:24px}
+  .mini .l{font-size:12px;color:var(--muted);margin-top:2px}
+
+  .section-h{margin:30px 0 12px;font-family:var(--mono);font-size:14px;color:var(--muted)}
+  .section-h .dollar{color:var(--accent)}
+  .heatwrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;overflow-x:auto}
+  .months{display:flex;font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:6px;padding-left:0}
+  .heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px;width:max-content}
+  .cell{width:11px;height:11px;border-radius:2.5px;background:var(--l0)}
+  .cell.l1{background:var(--l1)}.cell.l2{background:var(--l2)}.cell.l3{background:var(--l3)}.cell.l4{background:var(--l4)}
+  .legend{display:flex;align-items:center;gap:4px;justify-content:flex-end;margin-top:10px;font-size:11px;color:var(--muted)}
+  .legend .cell{display:inline-block}
+
+  .repos{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+  .repo{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:1px solid var(--border);font-size:14px}
+  .repo:last-child{border-bottom:none}
+  .repo .name{font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:12px}
+  .repo .cnt{font-family:var(--mono);font-weight:600;color:var(--accent-soft);white-space:nowrap}
+  footer{margin-top:44px;font-size:12.5px;color:var(--muted)}
+  footer a{color:var(--accent-soft)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="prompt"><span class="dollar">$</span> git streak --mine</div>
+    <h1>Real <span class="flame">Streak</span></h1>
+    <p class="tagline">Your actual commit streak, counted from every commit in <em>your own repos</em> — even the ones where Claude Code or another AI agent took author credit.</p>
+  </header>
+
+  <div class="card">
+    <label for="token">GitHub personal access token</label>
+    <div class="token-row">
+      <input type="password" id="token" placeholder="github_pat_..." autocomplete="off">
+      <button class="primary" id="go">Compute</button>
+    </div>
+    <div class="remember">
+      <input type="checkbox" id="remember">
+      <label for="remember" style="all:unset;cursor:pointer">Remember token on this device</label>
+    </div>
+    <p class="privacy"><b>Your token never leaves this browser.</b> This page has no server — it calls api.github.com directly from your device. Nothing is logged or stored anywhere else. <a href="#" id="viewsrc" style="color:var(--accent-soft)">Verify: view source</a>.</p>
+    <details class="howto">
+      <summary>How to create a token (2 min)</summary>
+      <ol>
+        <li>GitHub → Settings → Developer settings → <b>Fine-grained tokens</b> → Generate new token</li>
+        <li>Repository access: <b>All repositories</b></li>
+        <li>Permissions → Repository permissions → <b>Contents: Read-only</b></li>
+        <li>Generate, copy, paste above. Read-only is all this page needs.</li>
+      </ol>
+    </details>
+    <div id="status"></div>
+    <div class="bar" id="bar"><i id="barfill"></i></div>
+  </div>
+
+  <div id="results">
+    <div class="stat-hero">
+      <div class="prompt"><span class="dollar">&gt;</span> current streak</div>
+      <div class="big"><span id="cur">0</span> <small>days</small></div>
+      <div class="substat" id="cursub"></div>
+    </div>
+    <div class="grid3">
+      <div class="mini"><div class="n" id="longest">0</div><div class="l">longest streak</div></div>
+      <div class="mini"><div class="n" id="total">0</div><div class="l">commits · 1yr</div></div>
+      <div class="mini"><div class="n" id="active">0</div><div class="l">active days</div></div>
+    </div>
+
+    <div class="section-h"><span class="dollar">&gt;</span> last 12 months</div>
+    <div class="heatwrap">
+      <div class="months" id="months"></div>
+      <div class="heat" id="heat"></div>
+      <div class="legend">Less <span class="cell"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span> More</div>
+    </div>
+
+    <div class="section-h"><span class="dollar">&gt;</span> commits by repo</div>
+    <div class="repos" id="repos"></div>
+  </div>
+
+  <footer>Counts commits on default branches of repos you own, from the last 366 days, regardless of commit author — because in your repos, it's your work. Not affiliated with GitHub.</footer>
+</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const API='https://api.github.com';
+  let TOKEN='';
+
+  // localStorage may be unavailable in some sandboxes — degrade gracefully
+  const store={
+    get k(){try{return localStorage.getItem('rs_token')||''}catch(e){return ''}},
+    set(v){try{v?localStorage.setItem('rs_token',v):localStorage.removeItem('rs_token')}catch(e){}}
+  };
+  const saved=store.k;
+  if(saved){$('token').value=saved;$('remember').checked=true;}
+
+  $('viewsrc').addEventListener('click',e=>{e.preventDefault();alert('On GitHub Pages, this page is a single index.html in a public repo — open the repo to read every line. Ctrl+U / long-press → view source also works.')});
+
+  function status(msg,err){const s=$('status');s.textContent=msg;s.className=err?'err':''}
+  function progress(p){$('bar').style.display=p==null?'none':'block';if(p!=null)$('barfill').style.width=Math.round(p*100)+'%'}
+
+  async function gh(url){
+    const r=await fetch(url,{headers:{'Authorization':'Bearer '+TOKEN,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}});
+    if(r.status===401)throw new Error('Token rejected (401). Check it was copied fully and hasn\'t expired.');
+    if(r.status===403||r.status===429){const reset=r.headers.get('x-ratelimit-reset');const t=reset?new Date(reset*1000).toLocaleTimeString():'later';throw new Error('Rate limited by GitHub. Try again after '+t+'.');}
+    if(r.status===409)return {data:[],link:null}; // empty repo
+    if(!r.ok)throw new Error('GitHub API error '+r.status+' on '+url.replace(API,''));
+    return {data:await r.json(),link:r.headers.get('Link')};
+  }
+  function nextUrl(link){if(!link)return null;const m=link.split(',').find(p=>p.includes('rel="next"'));return m?m.match(/<([^>]+)>/)[1]:null}
+  async function ghAll(url,cap){
+    let out=[],u=url,pages=0;
+    while(u&&pages<cap){const{data,link}=await gh(u);out=out.concat(data);u=nextUrl(link);pages++;}
+    return out;
+  }
+
+  const dkey=d=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd};
+
+  async function run(){
+    TOKEN=$('token').value.trim();
+    if(!TOKEN){status('Paste a token first.',true);return}
+    store.set($('remember').checked?TOKEN:'');
+    $('go').disabled=true;$('results').style.display='none';progress(0);
+    try{
+      status('Checking token…');
+      const me=(await gh(API+'/user')).data;
+      status('Hi @'+me.login+' — listing your repos…');
+      let repos=await ghAll(API+'/user/repos?affiliation=owner&per_page=100&sort=pushed',5);
+      const since=new Date(Date.now()-366*86400000);
+      repos=repos.filter(r=>!r.fork&&new Date(r.pushed_at)>=since);
+      if(!repos.length)throw new Error('No repos with activity in the last year were found for @'+me.login+'.');
+
+      const counts={},repoTotals=[];const sinceISO=since.toISOString();
+      const seen=new Set();
+      let done=0;
+      // limited concurrency: 4 repos at a time
+      const queue=repos.slice();
+      async function worker(){
+        while(queue.length){
+          const repo=queue.shift();
+          status('Scanning '+(done+1)+'/'+repos.length+': '+repo.name+'…');
+          try{
+            const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&per_page=100',15);
+            let n=0;
+            for(const c of commits){
+              if(seen.has(c.sha))continue;seen.add(c.sha);
+              const d=new Date(c.commit.author.date);
+              const k=dkey(d);counts[k]=(counts[k]||0)+1;n++;
+            }
+            if(n)repoTotals.push([repo.name,n]);
+          }catch(e){ if(/Rate limited|rejected/.test(e.message)) throw e; /* skip unreadable repo */ }
+          done++;progress(done/repos.length);
+        }
+      }
+      await Promise.all([worker(),worker(),worker(),worker()]);
+
+      render(me.login,counts,repoTotals);
+      status('Done. Scanned '+repos.length+' repos for @'+me.login+'.');
+    }catch(e){status(e.message,true)}
+    finally{$('go').disabled=false;progress(null)}
+  }
+
+  function render(login,counts,repoTotals){
+    const today=new Date();today.setHours(0,0,0,0);
+    // current streak (a zero today doesn't break it yet)
+    let cur=0,d=new Date(today);
+    if(!(counts[dkey(d)]>0))d.setDate(d.getDate()-1);
+    while(counts[dkey(d)]>0){cur++;d.setDate(d.getDate()-1)}
+    // walk the year for longest streak, totals, heatmap
+    const days=[];const start=new Date(today);start.setDate(start.getDate()-365);
+    // align heatmap start to Sunday
+    const hstart=new Date(start);hstart.setDate(hstart.getDate()-hstart.getDay());
+    let longest=0,runlen=0,total=0,active=0;
+    const iter=new Date(start);
+    while(iter<=today){
+      const c=counts[dkey(iter)]||0;total+=c;if(c>0){active++;runlen++;longest=Math.max(longest,runlen)}else runlen=0;
+      iter.setDate(iter.getDate()+1);
+    }
+    $('cur').textContent=cur;
+    $('cursub').textContent=cur>0?('Keep it alive — commit today, @'+login+'.'):('Last active: '+(lastActive(counts,today)||'—')+'. One commit restarts the fire.');
+    $('longest').textContent=longest;
+    $('total').textContent=total.toLocaleString();
+    $('active').textContent=active;
+
+    // heatmap
+    const heat=$('heat');heat.innerHTML='';
+    const monthsEl=$('months');monthsEl.innerHTML='';
+    const vals=Object.values(counts).filter(v=>v>0).sort((a,b)=>a-b);
+    const q=p=>vals.length?vals[Math.min(vals.length-1,Math.floor(p*vals.length))]:1;
+    const t1=Math.max(1,q(.25)),t2=Math.max(t1+0,q(.5)),t3=Math.max(t2,q(.75));
+    const hiter=new Date(hstart);const monthLabels=[];let col=0;
+    while(hiter<=today){
+      const c=counts[dkey(hiter)]||0;
+      const cell=document.createElement('span');
+      let lvl=0;if(c>0)lvl=c<=t1?1:c<=t2?2:c<=t3?3:4;
+      cell.className='cell'+(lvl?' l'+lvl:'');
+      cell.title=dkey(hiter)+': '+c+' commit'+(c===1?'':'s');
+      heat.appendChild(cell);
+      if(hiter.getDay()===0){ // new week column
+        if(hiter.getDate()<=7)monthLabels.push([col,hiter.toLocaleString('en',{month:'short'})]);
+        col++;
+      }
+      hiter.setDate(hiter.getDate()+1);
+    }
+    // month labels: 14px per column (11 cell + 3 gap)
+    let html='',prev=0;
+    for(const[c,name]of monthLabels){html+='<span style="display:inline-block;width:'+((c-prev)*14)+'px"></span>'+name;prev=c+2}
+    monthsEl.innerHTML=html;
+
+    // repos
+    repoTotals.sort((a,b)=>b[1]-a[1]);
+    $('repos').innerHTML=repoTotals.map(([n,c])=>'<div class="repo"><span class="name">'+n.replace(/</g,'&lt;')+'</span><span class="cnt">'+c+'</span></div>').join('')||'<div class="repo"><span class="name">No commits found in the last year</span></div>';
+
+    $('results').style.display='block';
+    $('heatwrap')&&($('heatwrap').scrollLeft=99999);
+    document.querySelector('.heatwrap').scrollLeft=99999;
+  }
+
+  function lastActive(counts,today){
+    const d=new Date(today);
+    for(let i=0;i<366;i++){if(counts[dkey(d)]>0)return dkey(d);d.setDate(d.getDate()-1)}
+    return null;
+  }
+
+  $('go').addEventListener('click',run);
+  $('token').addEventListener('keydown',e=>{if(e.key==='Enter')run()});
+})();
+</script>
+</body>
+</html>

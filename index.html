@@ -36,8 +36,11 @@
   button.primary{background:var(--accent);color:#1A0E02;border:none;border-radius:10px;font-family:var(--mono);font-weight:800;font-size:14px;padding:13px 18px;cursor:pointer;white-space:nowrap}
   button.primary:hover{background:var(--accent-soft)}
   button.primary:disabled{opacity:.45;cursor:default}
-  .remember{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;color:var(--muted)}
-  .remember input{accent-color:var(--accent)}
+  button.ghost{background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:var(--mono);font-weight:600;font-size:13px;padding:11px 16px;cursor:pointer}
+  button.ghost:hover{border-color:var(--accent)}
+  .checks{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px}
+  .check{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
+  .check input{accent-color:var(--accent)}
   .privacy{margin-top:14px;font-size:13px;color:var(--muted);border-left:2px solid var(--border);padding-left:12px}
   .privacy b{color:var(--text)}
   details.howto{margin-top:14px}
@@ -52,6 +55,11 @@
   .bar i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent-soft));transition:width .3s}
 
   #results{display:none;margin-top:34px}
+
+  .risk{display:none;margin-bottom:12px;border-radius:12px;padding:13px 16px;font-family:var(--mono);font-size:13.5px;font-weight:600}
+  .risk.warn{display:block;background:#2A1712;border:1px solid #5C2E1A;color:var(--accent-soft)}
+  .risk.safe{display:block;background:#12241A;border:1px solid #235233;color:var(--ok)}
+
   .stat-hero{text-align:left;padding:26px 22px;background:var(--surface);border:1px solid var(--border);border-radius:14px}
   .stat-hero .prompt{margin-bottom:2px}
   .big{font-family:var(--mono);font-weight:800;font-size:clamp(56px,16vw,96px);line-height:1;letter-spacing:-.04em;background:linear-gradient(100deg,var(--accent) 10%,var(--accent-soft) 90%);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -62,10 +70,30 @@
   .mini .n{font-family:var(--mono);font-weight:800;font-size:24px}
   .mini .l{font-size:12px;color:var(--muted);margin-top:2px}
 
+  .sharebar{margin-top:12px;display:flex;gap:10px}
+  .sharebar button{flex:1}
+
+  .compare{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px}
+  .compare .split{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:12px 0 10px}
+  .compare .you{background:linear-gradient(90deg,var(--accent),var(--accent-soft))}
+  .compare .ai{background:var(--surface2);border-left:1px solid var(--bg)}
+  .compare .row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);font-family:var(--mono)}
+  .compare .row b{color:var(--text)}
+  .compare .punch{margin-top:12px;font-size:14px;color:var(--accent-soft)}
+
+  .days14{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .d14{text-align:center}
+  .d14 .bar14{margin:0 auto;width:70%;max-width:16px;border-radius:3px;background:linear-gradient(180deg,var(--accent-soft),var(--accent));min-height:2px}
+  .d14 .cnt{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px}
+  .d14 .dow{font-family:var(--mono);font-size:9px;color:var(--muted);opacity:.7}
+  .d14.zero .bar14{background:var(--surface2)}
+  .d14.today .dow{color:var(--accent)}
+  .d14wrap{display:flex;flex-direction:column;justify-content:flex-end;height:64px}
+
   .section-h{margin:30px 0 12px;font-family:var(--mono);font-size:14px;color:var(--muted)}
   .section-h .dollar{color:var(--accent)}
   .heatwrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;overflow-x:auto}
-  .months{display:flex;font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:6px;padding-left:0}
+  .months{display:flex;font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:6px}
   .heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px;width:max-content}
   .cell{width:11px;height:11px;border-radius:2.5px;background:var(--l0)}
   .cell.l1{background:var(--l1)}.cell.l2{background:var(--l2)}.cell.l3{background:var(--l3)}.cell.l4{background:var(--l4)}
@@ -79,6 +107,7 @@
   .repo .cnt{font-family:var(--mono);font-weight:600;color:var(--accent-soft);white-space:nowrap}
   footer{margin-top:44px;font-size:12.5px;color:var(--muted)}
   footer a{color:var(--accent-soft)}
+  canvas#cardcv{display:none}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -96,9 +125,9 @@
       <input type="password" id="token" placeholder="github_pat_..." autocomplete="off">
       <button class="primary" id="go">Compute</button>
     </div>
-    <div class="remember">
-      <input type="checkbox" id="remember">
-      <label for="remember" style="all:unset;cursor:pointer">Remember token on this device</label>
+    <div class="checks">
+      <span class="check"><input type="checkbox" id="remember"><label for="remember" style="all:unset;cursor:pointer">Remember token on this device</label></span>
+      <span class="check"><input type="checkbox" id="allbranches"><label for="allbranches" style="all:unset;cursor:pointer">Scan all branches (slower, most complete)</label></span>
     </div>
     <p class="privacy"><b>Your token never leaves this browser.</b> This page has no server — it calls api.github.com directly from your device. Nothing is logged or stored anywhere else. <a href="#" id="viewsrc" style="color:var(--accent-soft)">Verify: view source</a>.</p>
     <details class="howto">
@@ -115,6 +144,8 @@
   </div>
 
   <div id="results">
+    <div class="risk" id="risk"></div>
+
     <div class="stat-hero">
       <div class="prompt"><span class="dollar">&gt;</span> current streak</div>
       <div class="big"><span id="cur">0</span> <small>days</small></div>
@@ -125,6 +156,21 @@
       <div class="mini"><div class="n" id="total">0</div><div class="l">commits · 1yr</div></div>
       <div class="mini"><div class="n" id="active">0</div><div class="l">active days</div></div>
     </div>
+    <div class="sharebar">
+      <button class="primary" id="sharecard">Share streak card</button>
+      <button class="ghost" id="downloadcard">Download PNG</button>
+    </div>
+
+    <div class="section-h"><span class="dollar">&gt;</span> who got the credit</div>
+    <div class="compare">
+      <div class="row"><span>credited to <b id="cmp-login">you</b></span><span><b id="cmp-you">0</b></span></div>
+      <div class="split"><div class="you" id="split-you" style="width:50%"></div><div class="ai" id="split-ai" style="width:50%"></div></div>
+      <div class="row"><span>credited to AI / unlinked authors</span><span><b id="cmp-ai">0</b></span></div>
+      <div class="punch" id="cmp-punch"></div>
+    </div>
+
+    <div class="section-h"><span class="dollar">&gt;</span> last 14 days</div>
+    <div class="days14" id="days14"></div>
 
     <div class="section-h"><span class="dollar">&gt;</span> last 12 months</div>
     <div class="heatwrap">
@@ -137,7 +183,8 @@
     <div class="repos" id="repos"></div>
   </div>
 
-  <footer>Counts commits on default branches of repos you own, from the last 366 days, regardless of commit author — because in your repos, it's your work. Not affiliated with GitHub.</footer>
+  <canvas id="cardcv" width="1080" height="1080"></canvas>
+  <footer>Counts commits in repos you own from the last 366 days, regardless of commit author — because in your repos, it's your work. Default branch only, unless "all branches" is on. The credit split is an approximation of what GitHub's own graph would count. Not affiliated with GitHub.</footer>
 </div>
 
 <script>
@@ -145,8 +192,8 @@
   const $=id=>document.getElementById(id);
   const API='https://api.github.com';
   let TOKEN='';
+  let LAST=null; // computed results for share card
 
-  // localStorage may be unavailable in some sandboxes — degrade gracefully
   const store={
     get k(){try{return localStorage.getItem('rs_token')||''}catch(e){return ''}},
     set(v){try{v?localStorage.setItem('rs_token',v):localStorage.removeItem('rs_token')}catch(e){}}
@@ -163,7 +210,7 @@
     const r=await fetch(url,{headers:{'Authorization':'Bearer '+TOKEN,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}});
     if(r.status===401)throw new Error('Token rejected (401). Check it was copied fully and hasn\'t expired.');
     if(r.status===403||r.status===429){const reset=r.headers.get('x-ratelimit-reset');const t=reset?new Date(reset*1000).toLocaleTimeString():'later';throw new Error('Rate limited by GitHub. Try again after '+t+'.');}
-    if(r.status===409)return {data:[],link:null}; // empty repo
+    if(r.status===409)return {data:[],link:null};
     if(!r.ok)throw new Error('GitHub API error '+r.status+' on '+url.replace(API,''));
     return {data:await r.json(),link:r.headers.get('Link')};
   }
@@ -175,11 +222,14 @@
   }
 
   const dkey=d=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd};
+  const AI_RE=/claude|copilot|codex|devin|cursor|aider|\[bot\]/i;
+  const AI_EMAIL_RE=/noreply@anthropic\.com|github-actions|users\.noreply\.github\.com\b.*\[bot\]/i;
 
   async function run(){
     TOKEN=$('token').value.trim();
     if(!TOKEN){status('Paste a token first.',true);return}
     store.set($('remember').checked?TOKEN:'');
+    const allBranches=$('allbranches').checked;
     $('go').disabled=true;$('results').style.display='none';progress(0);
     try{
       status('Checking token…');
@@ -192,94 +242,248 @@
 
       const counts={},repoTotals=[];const sinceISO=since.toISOString();
       const seen=new Set();
+      let mine=0,ai=0,other=0;
       let done=0;
-      // limited concurrency: 4 repos at a time
       const queue=repos.slice();
+
+      function tally(commits){
+        let n=0;
+        for(const c of commits){
+          if(seen.has(c.sha))continue;seen.add(c.sha);
+          const d=new Date(c.commit.author.date);
+          counts[dkey(d)]=(counts[dkey(d)]||0)+1;n++;
+          const linked=c.author&&c.author.login;
+          if(linked&&c.author.login.toLowerCase()===me.login.toLowerCase())mine++;
+          else{
+            const nm=(c.commit.author.name||'')+' '+(c.commit.author.email||'');
+            if(!linked&&(AI_RE.test(nm)||AI_EMAIL_RE.test(nm)))ai++;
+            else other++;
+          }
+        }
+        return n;
+      }
+
+      async function scanRepo(repo){
+        let n=0;
+        if(allBranches){
+          const branches=(await ghAll(API+'/repos/'+repo.full_name+'/branches?per_page=100',1)).slice(0,30);
+          for(const b of branches){
+            const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&sha='+encodeURIComponent(b.name)+'&per_page=100',8);
+            n+=tally(commits);
+          }
+        }else{
+          const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&per_page=100',15);
+          n=tally(commits);
+        }
+        return n;
+      }
+
       async function worker(){
         while(queue.length){
           const repo=queue.shift();
-          status('Scanning '+(done+1)+'/'+repos.length+': '+repo.name+'…');
+          status('Scanning '+(done+1)+'/'+repos.length+': '+repo.name+(allBranches?' (all branches)':'')+'…');
           try{
-            const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&per_page=100',15);
-            let n=0;
-            for(const c of commits){
-              if(seen.has(c.sha))continue;seen.add(c.sha);
-              const d=new Date(c.commit.author.date);
-              const k=dkey(d);counts[k]=(counts[k]||0)+1;n++;
-            }
+            const n=await scanRepo(repo);
             if(n)repoTotals.push([repo.name,n]);
-          }catch(e){ if(/Rate limited|rejected/.test(e.message)) throw e; /* skip unreadable repo */ }
+          }catch(e){ if(/Rate limited|rejected/.test(e.message)) throw e; }
           done++;progress(done/repos.length);
         }
       }
       await Promise.all([worker(),worker(),worker(),worker()]);
 
-      render(me.login,counts,repoTotals);
-      status('Done. Scanned '+repos.length+' repos for @'+me.login+'.');
+      render(me.login,counts,repoTotals,{mine,ai,other});
+      status('Done. Scanned '+repos.length+' repos for @'+me.login+(allBranches?' across branches.':'.'));
     }catch(e){status(e.message,true)}
     finally{$('go').disabled=false;progress(null)}
   }
 
-  function render(login,counts,repoTotals){
+  function computeStats(counts){
     const today=new Date();today.setHours(0,0,0,0);
-    // current streak (a zero today doesn't break it yet)
     let cur=0,d=new Date(today);
     if(!(counts[dkey(d)]>0))d.setDate(d.getDate()-1);
     while(counts[dkey(d)]>0){cur++;d.setDate(d.getDate()-1)}
-    // walk the year for longest streak, totals, heatmap
-    const days=[];const start=new Date(today);start.setDate(start.getDate()-365);
-    // align heatmap start to Sunday
-    const hstart=new Date(start);hstart.setDate(hstart.getDate()-hstart.getDay());
+    const start=new Date(today);start.setDate(start.getDate()-365);
     let longest=0,runlen=0,total=0,active=0;
     const iter=new Date(start);
     while(iter<=today){
-      const c=counts[dkey(iter)]||0;total+=c;if(c>0){active++;runlen++;longest=Math.max(longest,runlen)}else runlen=0;
+      const c=counts[dkey(iter)]||0;total+=c;
+      if(c>0){active++;runlen++;longest=Math.max(longest,runlen)}else runlen=0;
       iter.setDate(iter.getDate()+1);
     }
+    return {cur,longest,total,active,today,start};
+  }
+
+  function render(login,counts,repoTotals,credit){
+    const st=computeStats(counts);
+    const {cur,longest,total,active,today,start}=st;
+    const todayCount=counts[dkey(today)]||0;
+    LAST={login,counts,st,credit,todayCount};
+
+    // risk banner
+    const risk=$('risk');
+    if(todayCount>0){
+      risk.className='risk safe';
+      risk.textContent='✓ '+todayCount+' commit'+(todayCount===1?'':'s')+' today — streak is safe.';
+    }else if(cur>0){
+      const mid=new Date(today);mid.setDate(mid.getDate()+1);
+      const hrs=Math.max(0,Math.floor((mid-Date.now())/3600000));
+      risk.className='risk warn';
+      risk.textContent='⚠ Streak at risk — no commits yet today. '+hrs+'h left to keep the '+cur+'-day fire alive.';
+    }else{
+      risk.className='risk';risk.textContent='';
+    }
+
     $('cur').textContent=cur;
-    $('cursub').textContent=cur>0?('Keep it alive — commit today, @'+login+'.'):('Last active: '+(lastActive(counts,today)||'—')+'. One commit restarts the fire.');
+    $('cursub').textContent=cur>0?('Keep it alive — commit today, @'+login+'.'):('One commit restarts the fire, @'+login+'.');
     $('longest').textContent=longest;
     $('total').textContent=total.toLocaleString();
     $('active').textContent=active;
 
+    // compare
+    const you=credit.mine,rest=credit.ai+credit.other,sum=Math.max(1,you+rest);
+    const pctYou=Math.round(you/sum*100);
+    $('cmp-login').textContent='@'+login;
+    $('cmp-you').textContent=you.toLocaleString()+' ('+pctYou+'%)';
+    $('cmp-ai').textContent=rest.toLocaleString()+' ('+(100-pctYou)+'%)';
+    $('split-you').style.width=Math.max(2,pctYou)+'%';
+    $('split-ai').style.width=Math.max(2,100-pctYou)+'%';
+    $('cmp-punch').textContent=rest>you
+      ? 'GitHub\'s graph credits you for only '+pctYou+'% of your own work. The other '+rest.toLocaleString()+' commits? An AI took the byline.'
+      : (rest>0?'Nice — most of your commits carry your name. '+rest.toLocaleString()+' slipped away to unlinked authors.':'Every single commit is credited to you. Clean.');
+
+    // last 14 days
+    const wrap=$('days14');wrap.innerHTML='';
+    const maxc=Math.max(1,...Array.from({length:14},(_,i)=>{const dd=new Date(today);dd.setDate(dd.getDate()-13+i);return counts[dkey(dd)]||0}));
+    for(let i=13;i>=0;i--){
+      const dd=new Date(today);dd.setDate(dd.getDate()-i);
+      const c=counts[dkey(dd)]||0;
+      const el=document.createElement('div');
+      el.className='d14'+(c===0?' zero':'')+(i===0?' today':'');
+      el.innerHTML='<div class="d14wrap"><div class="bar14" style="height:'+Math.max(3,Math.round(c/maxc*60))+'px"></div></div><div class="cnt">'+c+'</div><div class="dow">'+dd.toLocaleString('en',{weekday:'narrow'})+'</div>';
+      wrap.appendChild(el);
+    }
+
     // heatmap
+    const hstart=new Date(start);hstart.setDate(hstart.getDate()-hstart.getDay());
     const heat=$('heat');heat.innerHTML='';
     const monthsEl=$('months');monthsEl.innerHTML='';
     const vals=Object.values(counts).filter(v=>v>0).sort((a,b)=>a-b);
     const q=p=>vals.length?vals[Math.min(vals.length-1,Math.floor(p*vals.length))]:1;
-    const t1=Math.max(1,q(.25)),t2=Math.max(t1+0,q(.5)),t3=Math.max(t2,q(.75));
+    const t1=Math.max(1,q(.25)),t2=Math.max(t1,q(.5)),t3=Math.max(t2,q(.75));
+    const lvl=c=>c<=0?0:c<=t1?1:c<=t2?2:c<=t3?3:4;
     const hiter=new Date(hstart);const monthLabels=[];let col=0;
     while(hiter<=today){
       const c=counts[dkey(hiter)]||0;
       const cell=document.createElement('span');
-      let lvl=0;if(c>0)lvl=c<=t1?1:c<=t2?2:c<=t3?3:4;
-      cell.className='cell'+(lvl?' l'+lvl:'');
+      const L=lvl(c);
+      cell.className='cell'+(L?' l'+L:'');
       cell.title=dkey(hiter)+': '+c+' commit'+(c===1?'':'s');
       heat.appendChild(cell);
-      if(hiter.getDay()===0){ // new week column
+      if(hiter.getDay()===0){
         if(hiter.getDate()<=7)monthLabels.push([col,hiter.toLocaleString('en',{month:'short'})]);
         col++;
       }
       hiter.setDate(hiter.getDate()+1);
     }
-    // month labels: 14px per column (11 cell + 3 gap)
     let html='',prev=0;
     for(const[c,name]of monthLabels){html+='<span style="display:inline-block;width:'+((c-prev)*14)+'px"></span>'+name;prev=c+2}
     monthsEl.innerHTML=html;
 
-    // repos
     repoTotals.sort((a,b)=>b[1]-a[1]);
     $('repos').innerHTML=repoTotals.map(([n,c])=>'<div class="repo"><span class="name">'+n.replace(/</g,'&lt;')+'</span><span class="cnt">'+c+'</span></div>').join('')||'<div class="repo"><span class="name">No commits found in the last year</span></div>';
 
     $('results').style.display='block';
-    $('heatwrap')&&($('heatwrap').scrollLeft=99999);
     document.querySelector('.heatwrap').scrollLeft=99999;
   }
 
-  function lastActive(counts,today){
-    const d=new Date(today);
-    for(let i=0;i<366;i++){if(counts[dkey(d)]>0)return dkey(d);d.setDate(d.getDate()-1)}
-    return null;
+  /* ---------- share card ---------- */
+  async function drawCard(){
+    if(!LAST)return null;
+    const {login,counts,st,credit}=LAST;
+    const cv=$('cardcv'),ctx=cv.getContext('2d');
+    try{await document.fonts.load('800 150px "JetBrains Mono"');await document.fonts.load('600 34px "JetBrains Mono"');await document.fonts.load('400 30px "JetBrains Mono"');}catch(e){}
+    const W=1080,H=1080,P=76;
+    // bg
+    ctx.fillStyle='#0F1319';ctx.fillRect(0,0,W,H);
+    // top prompt
+    ctx.font='600 34px "JetBrains Mono",monospace';
+    ctx.fillStyle='#FF8A2A';ctx.fillText('$',P,P+30);
+    ctx.fillStyle='#97A0AC';ctx.fillText('git streak --mine',P+34,P+30);
+    // big number with gradient
+    const grad=ctx.createLinearGradient(P,0,700,0);
+    grad.addColorStop(0,'#FF8A2A');grad.addColorStop(1,'#FFC46B');
+    ctx.font='800 190px "JetBrains Mono",monospace';
+    ctx.fillStyle=grad;
+    const numStr=String(st.cur);
+    ctx.fillText(numStr,P-8,P+236);
+    const numW=ctx.measureText(numStr).width;
+    ctx.font='600 44px "JetBrains Mono",monospace';
+    ctx.fillStyle='#97A0AC';ctx.fillText('day streak',P+numW+14,P+228);
+    // sub stats line
+    ctx.font='400 32px "JetBrains Mono",monospace';
+    ctx.fillStyle='#E9E4DA';
+    ctx.fillText(st.total.toLocaleString()+' commits · '+st.active+' active days · best '+st.longest,P,P+310);
+    // credit punchline
+    const sum=Math.max(1,credit.mine+credit.ai+credit.other);
+    const pctAI=Math.round((credit.ai+credit.other)/sum*100);
+    ctx.fillStyle='#FFC46B';
+    if(pctAI>0){
+      ctx.fillText('AI took author credit for '+pctAI+'% of these.',P,P+364);
+      ctx.fillStyle='#97A0AC';
+      ctx.fillText('All of them are mine.',P,P+412);
+    }
+    // heatmap: last 26 weeks
+    const cell=26,gap=7,rows=7,cols=26;
+    const gridW=cols*(cell+gap)-gap;
+    const gx=(W-gridW)/2,gy=560;
+    const today=st.today;
+    const hstart=new Date(today);hstart.setDate(hstart.getDate()-(cols*7-1));
+    hstart.setDate(hstart.getDate()-hstart.getDay());
+    const vals=Object.values(counts).filter(v=>v>0).sort((a,b)=>a-b);
+    const q=p=>vals.length?vals[Math.min(vals.length-1,Math.floor(p*vals.length))]:1;
+    const t1=Math.max(1,q(.25)),t2=Math.max(t1,q(.5)),t3=Math.max(t2,q(.75));
+    const colors=['#1B222C','#3B2313','#7A3E14','#C06318','#FF8A2A'];
+    const it=new Date(hstart);
+    for(let c2=0;c2<cols;c2++){
+      for(let r=0;r<rows;r++){
+        if(it>today)break;
+        const n=counts[dkey(it)]||0;
+        const L=n<=0?0:n<=t1?1:n<=t2?2:n<=t3?3:4;
+        ctx.fillStyle=colors[L];
+        roundRect(ctx,gx+c2*(cell+gap),gy+r*(cell+gap),cell,cell,6);
+        it.setDate(it.getDate()+1);
+      }
+    }
+    // footer
+    ctx.font='600 34px "JetBrains Mono",monospace';
+    ctx.fillStyle='#E9E4DA';ctx.fillText('@'+login,P,H-P-8);
+    ctx.font='400 28px "JetBrains Mono",monospace';
+    ctx.fillStyle='#97A0AC';
+    const url=location.host?(location.host+location.pathname).replace(/\/$/,''):'realstreak';
+    const uw=ctx.measureText(url).width;
+    ctx.fillText(url,W-P-uw,H-P-8);
+    return cv;
+  }
+  function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.fill()}
+
+  async function cardBlob(){
+    const cv=await drawCard();if(!cv)return null;
+    return new Promise(res=>cv.toBlob(res,'image/png'));
+  }
+  $('sharecard').addEventListener('click',async()=>{
+    const blob=await cardBlob();if(!blob){status('Compute your streak first.',true);return}
+    const file=new File([blob],'real-streak.png',{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      try{await navigator.share({files:[file],title:'My Real Streak',text:'My real GitHub streak — counted even when the AI takes author credit.'})}catch(e){}
+    }else{downloadBlob(blob)}
+  });
+  $('downloadcard').addEventListener('click',async()=>{
+    const blob=await cardBlob();if(!blob){status('Compute your streak first.',true);return}
+    downloadBlob(blob);
+  });
+  function downloadBlob(blob){
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='real-streak.png';a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
   }
 
   $('go').addEventListener('click',run);

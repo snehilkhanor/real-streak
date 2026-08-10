@@ -347,192 +347,6 @@
       risk.className='risk';risk.textContent='';
     }
 
-    $('cur').textContent=cur;ss="prompt"><span class="dollar">&gt;</span> current streak</div>
-      <div class="big"><span id="cur">0</span> <small>days</small></div>
-      <div class="substat" id="cursub"></div>
-    </div>
-    <div class="grid3">
-      <div class="mini"><div class="n" id="longest">0</div><div class="l">longest streak</div></div>
-      <div class="mini"><div class="n" id="total">0</div><div class="l">commits · 1yr</div></div>
-      <div class="mini"><div class="n" id="active">0</div><div class="l">active days</div></div>
-    </div>
-    <div class="sharebar">
-      <button class="primary" id="sharecard">Share streak card</button>
-      <button class="ghost" id="downloadcard">Download PNG</button>
-    </div>
-
-    <div class="section-h"><span class="dollar">&gt;</span> who got the credit</div>
-    <div class="compare">
-      <div class="row"><span>credited to <b id="cmp-login">you</b></span><span><b id="cmp-you">0</b></span></div>
-      <div class="split"><div class="you" id="split-you" style="width:50%"></div><div class="ai" id="split-ai" style="width:50%"></div></div>
-      <div class="row"><span>credited to AI / unlinked authors</span><span><b id="cmp-ai">0</b></span></div>
-      <div class="punch" id="cmp-punch"></div>
-    </div>
-
-    <div class="section-h"><span class="dollar">&gt;</span> last 14 days</div>
-    <div class="days14" id="days14"></div>
-
-    <div class="section-h"><span class="dollar">&gt;</span> last 12 months</div>
-    <div class="heatwrap">
-      <div class="months" id="months"></div>
-      <div class="heat" id="heat"></div>
-      <div class="legend">Less <span class="cell"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span> More</div>
-    </div>
-
-    <div class="section-h"><span class="dollar">&gt;</span> commits by repo</div>
-    <div class="repos" id="repos"></div>
-  </div>
-
-  <canvas id="cardcv" width="1080" height="1080"></canvas>
-  <footer>Counts commits in repos you own from the last 366 days, regardless of commit author — because in your repos, it's your work. Default branch only, unless "all branches" is on. The credit split is an approximation of what GitHub's own graph would count. Not affiliated with GitHub.</footer>
-</div>
-
-<script>
-(function(){
-  const $=id=>document.getElementById(id);
-  const API='https://api.github.com';
-  let TOKEN='';
-  let LAST=null; // computed results for share card
-
-  const store={
-    get k(){try{return localStorage.getItem('rs_token')||''}catch(e){return ''}},
-    set(v){try{v?localStorage.setItem('rs_token',v):localStorage.removeItem('rs_token')}catch(e){}}
-  };
-  const saved=store.k;
-  if(saved){$('token').value=saved;$('remember').checked=true;}
-
-  $('viewsrc').addEventListener('click',e=>{e.preventDefault();alert('On GitHub Pages, this page is a single index.html in a public repo — open the repo to read every line. Ctrl+U / long-press → view source also works.')});
-
-  function status(msg,err){const s=$('status');s.textContent=msg;s.className=err?'err':''}
-  function progress(p){$('bar').style.display=p==null?'none':'block';if(p!=null)$('barfill').style.width=Math.round(p*100)+'%'}
-
-  async function gh(url){
-    const r=await fetch(url,{headers:{'Authorization':'Bearer '+TOKEN,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}});
-    if(r.status===401)throw new Error('Token rejected (401). Check it was copied fully and hasn\'t expired.');
-    if(r.status===403||r.status===429){const reset=r.headers.get('x-ratelimit-reset');const t=reset?new Date(reset*1000).toLocaleTimeString():'later';throw new Error('Rate limited by GitHub. Try again after '+t+'.');}
-    if(r.status===409)return {data:[],link:null};
-    if(!r.ok)throw new Error('GitHub API error '+r.status+' on '+url.replace(API,''));
-    return {data:await r.json(),link:r.headers.get('Link')};
-  }
-  function nextUrl(link){if(!link)return null;const m=link.split(',').find(p=>p.includes('rel="next"'));return m?m.match(/<([^>]+)>/)[1]:null}
-  async function ghAll(url,cap){
-    let out=[],u=url,pages=0;
-    while(u&&pages<cap){const{data,link}=await gh(u);out=out.concat(data);u=nextUrl(link);pages++;}
-    return out;
-  }
-
-  const dkey=d=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd};
-  const AI_RE=/claude|copilot|codex|devin|cursor|aider|\[bot\]/i;
-  const AI_EMAIL_RE=/noreply@anthropic\.com|github-actions|users\.noreply\.github\.com\b.*\[bot\]/i;
-
-  async function run(){
-    TOKEN=$('token').value.trim();
-    if(!TOKEN){status('Paste a token first.',true);return}
-    store.set($('remember').checked?TOKEN:'');
-    const allBranches=$('allbranches').checked;
-    $('go').disabled=true;$('results').style.display='none';progress(0);
-    try{
-      status('Checking token…');
-      const me=(await gh(API+'/user')).data;
-      status('Hi @'+me.login+' — listing your repos…');
-      let repos=await ghAll(API+'/user/repos?affiliation=owner&per_page=100&sort=pushed',5);
-      const since=new Date(Date.now()-366*86400000);
-      repos=repos.filter(r=>!r.fork&&new Date(r.pushed_at)>=since);
-      if(!repos.length)throw new Error('No repos with activity in the last year were found for @'+me.login+'.');
-
-      const counts={},repoTotals=[];const sinceISO=since.toISOString();
-      const seen=new Set();
-      let mine=0,ai=0,other=0;
-      let done=0;
-      const queue=repos.slice();
-
-      function tally(commits){
-        let n=0;
-        for(const c of commits){
-          if(seen.has(c.sha))continue;seen.add(c.sha);
-          const d=new Date(c.commit.author.date);
-          counts[dkey(d)]=(counts[dkey(d)]||0)+1;n++;
-          const linked=c.author&&c.author.login;
-          if(linked&&c.author.login.toLowerCase()===me.login.toLowerCase())mine++;
-          else{
-            const nm=(c.commit.author.name||'')+' '+(c.commit.author.email||'');
-            if(!linked&&(AI_RE.test(nm)||AI_EMAIL_RE.test(nm)))ai++;
-            else other++;
-          }
-        }
-        return n;
-      }
-
-      async function scanRepo(repo){
-        let n=0;
-        if(allBranches){
-          const branches=(await ghAll(API+'/repos/'+repo.full_name+'/branches?per_page=100',1)).slice(0,30);
-          for(const b of branches){
-            const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&sha='+encodeURIComponent(b.name)+'&per_page=100',8);
-            n+=tally(commits);
-          }
-        }else{
-          const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&per_page=100',15);
-          n=tally(commits);
-        }
-        return n;
-      }
-
-      async function worker(){
-        while(queue.length){
-          const repo=queue.shift();
-          status('Scanning '+(done+1)+'/'+repos.length+': '+repo.name+(allBranches?' (all branches)':'')+'…');
-          try{
-            const n=await scanRepo(repo);
-            if(n)repoTotals.push([repo.name,n]);
-          }catch(e){ if(/Rate limited|rejected/.test(e.message)) throw e; }
-          done++;progress(done/repos.length);
-        }
-      }
-      await Promise.all([worker(),worker(),worker(),worker()]);
-
-      render(me.login,counts,repoTotals,{mine,ai,other});
-      status('Done. Scanned '+repos.length+' repos for @'+me.login+(allBranches?' across branches.':'.'));
-    }catch(e){status(e.message,true)}
-    finally{$('go').disabled=false;progress(null)}
-  }
-
-  function computeStats(counts){
-    const today=new Date();today.setHours(0,0,0,0);
-    let cur=0,d=new Date(today);
-    if(!(counts[dkey(d)]>0))d.setDate(d.getDate()-1);
-    while(counts[dkey(d)]>0){cur++;d.setDate(d.getDate()-1)}
-    const start=new Date(today);start.setDate(start.getDate()-365);
-    let longest=0,runlen=0,total=0,active=0;
-    const iter=new Date(start);
-    while(iter<=today){
-      const c=counts[dkey(iter)]||0;total+=c;
-      if(c>0){active++;runlen++;longest=Math.max(longest,runlen)}else runlen=0;
-      iter.setDate(iter.getDate()+1);
-    }
-    return {cur,longest,total,active,today,start};
-  }
-
-  function render(login,counts,repoTotals,credit){
-    const st=computeStats(counts);
-    const {cur,longest,total,active,today,start}=st;
-    const todayCount=counts[dkey(today)]||0;
-    LAST={login,counts,st,credit,todayCount};
-
-    // risk banner
-    const risk=$('risk');
-    if(todayCount>0){
-      risk.className='risk safe';
-      risk.textContent='✓ '+todayCount+' commit'+(todayCount===1?'':'s')+' today — streak is safe.';
-    }else if(cur>0){
-      const mid=new Date(today);mid.setDate(mid.getDate()+1);
-      const hrs=Math.max(0,Math.floor((mid-Date.now())/3600000));
-      risk.className='risk warn';
-      risk.textContent='⚠ Streak at risk — no commits yet today. '+hrs+'h left to keep the '+cur+'-day fire alive.';
-    }else{
-      risk.className='risk';risk.textContent='';
-    }
-
     $('cur').textContent=cur;
     $('cursub').textContent=cur>0?('Keep it alive — commit today, @'+login+'.'):('One commit restarts the fire, @'+login+'.');
     $('longest').textContent=longest;
@@ -551,48 +365,63 @@
       ? 'GitHub\'s graph credits you for only '+pctYou+'% of your own work. The other '+rest.toLocaleString()+' commits? An AI took the byline.'
       : (rest>0?'Nice — most of your commits carry your name. '+rest.toLocaleString()+' slipped away to unlinked authors.':'Every single commit is credited to you. Clean.');
 
-    // last 14 days
-    const wrap=$('days14');wrap.innerHTML='';
-    const maxc=Math.max(1,...Array.from({length:14},(_,i)=>{const dd=new Date(today);dd.setDate(dd.getDate()-13+i);return counts[dkey(dd)]||0}));
-    for(let i=13;i>=0;i--){
-      const dd=new Date(today);dd.setDate(dd.getDate()-i);
-      const c=counts[dkey(dd)]||0;
-      const el=document.createElement('div');
-      el.className='d14'+(c===0?' zero':'')+(i===0?' today':'');
-      el.innerHTML='<div class="d14wrap"><div class="bar14" style="height:'+Math.max(3,Math.round(c/maxc*60))+'px"></div></div><div class="cnt">'+c+'</div><div class="dow">'+dd.toLocaleString('en',{weekday:'narrow'})+'</div>';
-      wrap.appendChild(el);
-    }
-
-    // heatmap
-    const hstart=new Date(start);hstart.setDate(hstart.getDate()-hstart.getDay());
-    const heat=$('heat');heat.innerHTML='';
-    const monthsEl=$('months');monthsEl.innerHTML='';
-    const vals=Object.values(counts).filter(v=>v>0).sort((a,b)=>a-b);
-    const q=p=>vals.length?vals[Math.min(vals.length-1,Math.floor(p*vals.length))]:1;
-    const t1=Math.max(1,q(.25)),t2=Math.max(t1,q(.5)),t3=Math.max(t2,q(.75));
-    const lvl=c=>c<=0?0:c<=t1?1:c<=t2?2:c<=t3?3:4;
-    const hiter=new Date(hstart);const monthLabels=[];let col=0;
-    while(hiter<=today){
-      const c=counts[dkey(hiter)]||0;
-      const cell=document.createElement('span');
-      const L=lvl(c);
-      cell.className='cell'+(L?' l'+L:'');
-      cell.title=dkey(hiter)+': '+c+' commit'+(c===1?'':'s');
-      heat.appendChild(cell);
-      if(hiter.getDay()===0){
-        if(hiter.getDate()<=7)monthLabels.push([col,hiter.toLocaleString('en',{month:'short'})]);
-        col++;
-      }
-      hiter.setDate(hiter.getDate()+1);
-    }
-    let html='',prev=0;
-    for(const[c,name]of monthLabels){html+='<span style="display:inline-block;width:'+((c-prev)*14)+'px"></span>'+name;prev=c+2}
-    monthsEl.innerHTML=html;
+    renderDays(+$('dayrange').value||14);
+    renderHeat(+$('heatrange').value||12);
 
     repoTotals.sort((a,b)=>b[1]-a[1]);
     $('repos').innerHTML=repoTotals.map(([n,c])=>'<div class="repo"><span class="name">'+n.replace(/</g,'&lt;')+'</span><span class="cnt">'+c+'</span></div>').join('')||'<div class="repo"><span class="name">No commits found in the last year</span></div>';
 
     $('results').style.display='block';
+  }
+
+  function renderDays(n){
+    if(!LAST)return;
+    const counts=LAST.counts,today=LAST.st.today;
+    const wrap=$('days14');wrap.innerHTML='';
+    wrap.style.gridTemplateColumns='repeat('+n+',1fr)';
+    wrap.classList.toggle('dense',n>21);
+    let maxc=1;
+    for(let i=0;i<n;i++){const dd=new Date(today);dd.setDate(dd.getDate()-i);maxc=Math.max(maxc,counts[dkey(dd)]||0)}
+    for(let i=n-1;i>=0;i--){
+      const dd=new Date(today);dd.setDate(dd.getDate()-i);
+      const c=counts[dkey(dd)]||0;
+      const el=document.createElement('div');
+      el.className='d14'+(c===0?' zero':'')+(i===0?' today':'');
+      el.title=dkey(dd)+': '+c+' commit'+(c===1?'':'s');
+      el.innerHTML='<div class="d14wrap"><div class="bar14" style="height:'+Math.max(3,Math.round(c/maxc*60))+'px"></div></div><div class="cnt">'+c+'</div><div class="dow">'+dd.toLocaleString('en',{weekday:'narrow'})+'</div>';
+      wrap.appendChild(el);
+    }
+  }
+
+  function renderHeat(months){
+    if(!LAST)return;
+    const counts=LAST.counts,today=LAST.st.today;
+    const startR=new Date(today);startR.setMonth(startR.getMonth()-months);startR.setDate(startR.getDate()+1);
+    const hstart=new Date(startR);hstart.setDate(hstart.getDate()-hstart.getDay());
+    const heat=$('heat');heat.innerHTML='';
+    const monthsEl=$('months');monthsEl.innerHTML='';
+    // thresholds from this range only, so shorter views get better contrast
+    const vals=[];const vi=new Date(startR);
+    while(vi<=today){const c=counts[dkey(vi)]||0;if(c>0)vals.push(c);vi.setDate(vi.getDate()+1)}
+    vals.sort((a,b)=>a-b);
+    const q=p=>vals.length?vals[Math.min(vals.length-1,Math.floor(p*vals.length))]:1;
+    const t1=Math.max(1,q(.25)),t2=Math.max(t1,q(.5)),t3=Math.max(t2,q(.75));
+    const it=new Date(hstart);let idx=0,cols=0,prevMonth=-1;const labels=[];
+    while(it<=today){
+      const col=Math.floor(idx/7);cols=col+1;
+      const c=counts[dkey(it)]||0;
+      const L=c<=0?0:c<=t1?1:c<=t2?2:c<=t3?3:4;
+      const cell=document.createElement('span');
+      cell.className='cell'+(L?' l'+L:'');
+      cell.title=dkey(it)+': '+c+' commit'+(c===1?'':'s');
+      heat.appendChild(cell);
+      if(it.getDate()===1||(idx===0&&it.getMonth()!==prevMonth)){
+        if(it.getMonth()!==prevMonth){labels.push([col,it.toLocaleString('en',{month:'short'})]);prevMonth=it.getMonth()}
+      }
+      idx++;it.setDate(it.getDate()+1);
+    }
+    monthsEl.style.width=(cols*14)+'px';
+    monthsEl.innerHTML=labels.map(([c,n])=>'<span style="position:absolute;left:'+(c*14)+'px">'+n+'</span>').join('');
     document.querySelector('.heatwrap').scrollLeft=99999;
   }
 
@@ -688,6 +517,11 @@
 
   $('go').addEventListener('click',run);
   $('token').addEventListener('keydown',e=>{if(e.key==='Enter')run()});
+  $('settingsbtn').addEventListener('click',()=>{
+    const s=$('setup');s.style.display=s.style.display==='none'?'block':'none';
+  });
+  $('dayrange').addEventListener('change',()=>renderDays(+$('dayrange').value));
+  $('heatrange').addEventListener('change',()=>renderHeat(+$('heatrange').value));
 })();
 </script>
 </body>

@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Real Streak — your actual GitHub commit streak</title>
+<meta name="description" content="Compute your true GitHub commit streak from your own repos — even when Claude Code or other AI agents take author credit.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0F1319; --surface:#171D26; --surface2:#1D2530; --border:#242E3B;
+    --text:#E9E4DA; --muted:#97A0AC; --accent:#FF8A2A; --accent-soft:#FFC46B;
+    --l0:#1B222C; --l1:#3B2313; --l2:#7A3E14; --l3:#C06318; --l4:#FF8A2A;
+    --danger:#FF6B6B; --ok:#7BD88F;
+    --mono:'JetBrains Mono',ui-monospace,monospace; --sans:'Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16px;line-height:1.55;min-height:100vh}
+  .wrap{max-width:820px;margin:0 auto;padding:28px 18px 80px}
+
+  header{margin:18px 0 30px}
+  .prompt{font-family:var(--mono);font-size:14px;color:var(--muted);letter-spacing:.02em}
+  .prompt .dollar{color:var(--accent)}
+  h1{font-family:var(--mono);font-weight:800;font-size:clamp(30px,7vw,44px);letter-spacing:-.03em;margin-top:6px}
+  h1 .flame{background:linear-gradient(100deg,var(--accent) 20%,var(--accent-soft) 80%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tagline{color:var(--muted);margin-top:8px;max-width:52ch}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px}
+  label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em}
+  .token-row{display:flex;gap:10px}
+  input[type=password],input[type=text]{flex:1;min-width:0;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:var(--mono);font-size:14px;padding:13px 14px;outline:none}
+  input:focus{border-color:var(--accent)}
+  button.primary{background:var(--accent);color:#1A0E02;border:none;border-radius:10px;font-family:var(--mono);font-weight:800;font-size:14px;padding:13px 18px;cursor:pointer;white-space:nowrap}
+  button.primary:hover{background:var(--accent-soft)}
+  button.primary:disabled{opacity:.45;cursor:default}
+  button.ghost{background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:var(--mono);font-weight:600;font-size:13px;padding:11px 16px;cursor:pointer}
+  button.ghost:hover{border-color:var(--accent)}
+  .checks{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px}
+  .check{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
+  .check input{accent-color:var(--accent)}
+  .privacy{margin-top:14px;font-size:13px;color:var(--muted);border-left:2px solid var(--border);padding-left:12px}
+  .privacy b{color:var(--text)}
+  details.howto{margin-top:14px}
+  details.howto summary{cursor:pointer;font-size:14px;color:var(--accent-soft)}
+  details.howto ol{margin:10px 0 4px 20px;font-size:14px;color:var(--muted)}
+  details.howto li{margin:4px 0}
+  details.howto code{font-family:var(--mono);font-size:12.5px;background:var(--bg);padding:1px 6px;border-radius:6px}
+
+  #status{margin-top:22px;font-family:var(--mono);font-size:13px;color:var(--muted);min-height:20px;white-space:pre-wrap}
+  #status.err{color:var(--danger)}
+  .bar{height:4px;background:var(--surface2);border-radius:2px;margin-top:10px;overflow:hidden;display:none}
+  .bar i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent-soft));transition:width .3s}
+
+  #results{display:none;margin-top:34px}
+
+  .risk{display:none;margin-bottom:12px;border-radius:12px;padding:13px 16px;font-family:var(--mono);font-size:13.5px;font-weight:600}
+  .risk.warn{display:block;background:#2A1712;border:1px solid #5C2E1A;color:var(--accent-soft)}
+  .risk.safe{display:block;background:#12241A;border:1px solid #235233;color:var(--ok)}
+
+  .stat-hero{text-align:left;padding:26px 22px;background:var(--surface);border:1px solid var(--border);border-radius:14px}
+  .stat-hero .prompt{margin-bottom:2px}
+  .big{font-family:var(--mono);font-weight:800;font-size:clamp(56px,16vw,96px);line-height:1;letter-spacing:-.04em;background:linear-gradient(100deg,var(--accent) 10%,var(--accent-soft) 90%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .big small{font-size:.32em;color:var(--muted);-webkit-text-fill-color:var(--muted);font-weight:600;letter-spacing:0}
+  .substat{margin-top:6px;font-size:14px;color:var(--muted)}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+  .mini{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px}
+  .mini .n{font-family:var(--mono);font-weight:800;font-size:24px}
+  .mini .l{font-size:12px;color:var(--muted);margin-top:2px}
+
+  .sharebar{margin-top:12px;display:flex;gap:10px}
+  .sharebar button{flex:1}
+
+  .compare{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px}
+  .compare .split{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:12px 0 10px}
+  .compare .you{background:linear-gradient(90deg,var(--accent),var(--accent-soft))}
+  .compare .ai{background:var(--surface2);border-left:1px solid var(--bg)}
+  .compare .row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);font-family:var(--mono)}
+  .compare .row b{color:var(--text)}
+  .compare .punch{margin-top:12px;font-size:14px;color:var(--accent-soft)}
+
+  .days14{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .d14{text-align:center}
+  .d14 .bar14{margin:0 auto;width:70%;max-width:16px;border-radius:3px;background:linear-gradient(180deg,var(--accent-soft),var(--accent));min-height:2px}
+  .d14 .cnt{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px}
+  .d14 .dow{font-family:var(--mono);font-size:9px;color:var(--muted);opacity:.7}
+  .d14.zero .bar14{background:var(--surface2)}
+  .d14.today .dow{color:var(--accent)}
+  .d14wrap{display:flex;flex-direction:column;justify-content:flex-end;height:64px}
+
+  .section-h{margin:30px 0 12px;font-family:var(--mono);font-size:14px;color:var(--muted)}
+  .section-h .dollar{color:var(--accent)}
+  .heatwrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;overflow-x:auto}
+  .months{position:relative;height:15px;font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:6px}
+  .topbar{display:none;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;font-family:var(--mono);font-size:13px;color:var(--muted)}
+  .topbar .ok{color:var(--ok)}
+  .topbar button{padding:8px 12px;font-size:12px}
+  select{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:13px;border-radius:8px;padding:3px 6px;outline:none}
+  select:focus{border-color:var(--accent)}
+  .days14.dense .cnt,.days14.dense .dow{display:none}
+  .heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px;width:max-content}
+  .cell{width:11px;height:11px;border-radius:2.5px;background:var(--l0)}
+  .cell.l1{background:var(--l1)}.cell.l2{background:var(--l2)}.cell.l3{background:var(--l3)}.cell.l4{background:var(--l4)}
+  .legend{display:flex;align-items:center;gap:4px;justify-content:flex-end;margin-top:10px;font-size:11px;color:var(--muted)}
+  .legend .cell{display:inline-block}
+
+  .repos{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+  .repo{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:1px solid var(--border);font-size:14px}
+  .repo:last-child{border-bottom:none}
+  .repo .name{font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:12px}
+  .repo .cnt{font-family:var(--mono);font-weight:600;color:var(--accent-soft);white-space:nowrap}
+  footer{margin-top:44px;font-size:12.5px;color:var(--muted)}
+  footer a{color:var(--accent-soft)}
+  canvas#cardcv{display:none}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="prompt"><span class="dollar">$</span> git streak --mine</div>
+    <h1>Real <span class="flame">Streak</span></h1>
+    <p class="tagline">Your actual commit streak, counted from every commit in <em>your own repos</em> — even the ones where Claude Code or another AI agent took author credit.</p>
+  </header>
+
+  <div class="topbar" id="topbar">
+    <span id="tb-user"><span class="ok">●</span> token active</span>
+    <button class="ghost" id="settingsbtn">⚙ token settings</button>
+  </div>
+
+  <div class="card" id="setup">
+    <label for="token">GitHub personal access token</label>
+    <div class="token-row">
+      <input type="password" id="token" placeholder="github_pat_..." autocomplete="off">
+      <button class="primary" id="go">Compute</button>
+    </div>
+    <div class="checks">
+      <span class="check"><input type="checkbox" id="remember"><label for="remember" style="all:unset;cursor:pointer">Remember token on this device</label></span>
+      <span class="check"><input type="checkbox" id="allbranches"><label for="allbranches" style="all:unset;cursor:pointer">Scan all branches (slower, most complete)</label></span>
+    </div>
+    <p class="privacy"><b>Your token never leaves this browser.</b> This page has no server — it calls api.github.com directly from your device. Nothing is logged or stored anywhere else. <a href="#" id="viewsrc" style="color:var(--accent-soft)">Verify: view source</a>.</p>
+    <details class="howto">
+      <summary>How to create a token (2 min)</summary>
+      <ol>
+        <li>GitHub → Settings → Developer settings → <b>Fine-grained tokens</b> → Generate new token</li>
+        <li>Repository access: <b>All repositories</b></li>
+        <li>Permissions → Repository permissions → <b>Contents: Read-only</b></li>
+        <li>Generate, copy, paste above. Read-only is all this page needs.</li>
+      </ol>
+    </details>
+    <div id="status"></div>
+    <div class="bar" id="bar"><i id="barfill"></i></div>
+  </div>
+
+  <div id="results">
+    <div class="risk" id="risk"></div>
+
+    <div class="stat-hero">
+      <div class="prompt"><span class="dollar">&gt;</span> current streak</div>
+      <div class="big"><span id="cur">0</span> <small>days</small></div>
+      <div class="substat" id="cursub"></div>
+    </div>
+    <div class="grid3">
+      <div class="mini"><div class="n" id="longest">0</div><div class="l">longest streak</div></div>
+      <div class="mini"><div class="n" id="total">0</div><div class="l">commits · 1yr</div></div>
+      <div class="mini"><div class="n" id="active">0</div><div class="l">active days</div></div>
+    </div>
+    <div class="sharebar">
+      <button class="primary" id="sharecard">Share streak card</button>
+      <button class="ghost" id="downloadcard">Download PNG</button>
+    </div>
+
+    <div class="section-h"><span class="dollar">&gt;</span> who got the credit</div>
+    <div class="compare">
+      <div class="row"><span>credited to <b id="cmp-login">you</b></span><span><b id="cmp-you">0</b></span></div>
+      <div class="split"><div class="you" id="split-you" style="width:50%"></div><div class="ai" id="split-ai" style="width:50%"></div></div>
+      <div class="row"><span>credited to AI / unlinked authors</span><span><b id="cmp-ai">0</b></span></div>
+      <div class="punch" id="cmp-punch"></div>
+    </div>
+
+    <div class="section-h"><span class="dollar">&gt;</span> last <select id="dayrange"><option value="7">7</option><option value="14" selected>14</option><option value="30">30</option><option value="60">60</option></select> days</div>
+    <div class="days14" id="days14"></div>
+
+    <div class="section-h"><span class="dollar">&gt;</span> last <select id="heatrange"><option value="3">3</option><option value="6">6</option><option value="12" selected>12</option></select> months</div>
+    <div class="heatwrap">
+      <div class="months" id="months"></div>
+      <div class="heat" id="heat"></div>
+      <div class="legend">Less <span class="cell"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span> More</div>
+    </div>
+
+    <div class="section-h"><span class="dollar">&gt;</span> commits by repo</div>
+    <div class="repos" id="repos"></div>
+  </div>
+
+  <canvas id="cardcv" width="1080" height="1080"></canvas>
+  <footer>Counts commits in repos you own from the last 366 days, regardless of commit author — because in your repos, it's your work. Default branch only, unless "all branches" is on. The credit split is an approximation of what GitHub's own graph would count. Not affiliated with GitHub.</footer>
+</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const API='https://api.github.com';
+  let TOKEN='';
+  let LAST=null; // computed results for share card
+
+  const store={
+    get k(){try{return localStorage.getItem('rs_token')||''}catch(e){return ''}},
+    set(v){try{v?localStorage.setItem('rs_token',v):localStorage.removeItem('rs_token')}catch(e){}}
+  };
+  const saved=store.k;
+  if(saved){$('token').value=saved;$('remember').checked=true;}
+
+  $('viewsrc').addEventListener('click',e=>{e.preventDefault();alert('On GitHub Pages, this page is a single index.html in a public repo — open the repo to read every line. Ctrl+U / long-press → view source also works.')});
+
+  function status(msg,err){const s=$('status');s.textContent=msg;s.className=err?'err':''}
+  function progress(p){$('bar').style.display=p==null?'none':'block';if(p!=null)$('barfill').style.width=Math.round(p*100)+'%'}
+
+  async function gh(url){
+    const r=await fetch(url,{headers:{'Authorization':'Bearer '+TOKEN,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}});
+    if(r.status===401)throw new Error('Token rejected (401). Check it was copied fully and hasn\'t expired.');
+    if(r.status===403||r.status===429){const reset=r.headers.get('x-ratelimit-reset');const t=reset?new Date(reset*1000).toLocaleTimeString():'later';throw new Error('Rate limited by GitHub. Try again after '+t+'.');}
+    if(r.status===409)return {data:[],link:null};
+    if(!r.ok)throw new Error('GitHub API error '+r.status+' on '+url.replace(API,''));
+    return {data:await r.json(),link:r.headers.get('Link')};
+  }
+  function nextUrl(link){if(!link)return null;const m=link.split(',').find(p=>p.includes('rel="next"'));return m?m.match(/<([^>]+)>/)[1]:null}
+  async function ghAll(url,cap){
+    let out=[],u=url,pages=0;
+    while(u&&pages<cap){const{data,link}=await gh(u);out=out.concat(data);u=nextUrl(link);pages++;}
+    return out;
+  }
+
+  const dkey=d=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd};
+  const AI_RE=/claude|copilot|codex|devin|cursor|aider|\[bot\]/i;
+  const AI_EMAIL_RE=/noreply@anthropic\.com|github-actions|users\.noreply\.github\.com\b.*\[bot\]/i;
+
+  async function run(){
+    TOKEN=$('token').value.trim();
+    if(!TOKEN){status('Paste a token first.',true);return}
+    store.set($('remember').checked?TOKEN:'');
+    const allBranches=$('allbranches').checked;
+    $('go').disabled=true;$('results').style.display='none';progress(0);
+    try{
+      status('Checking token…');
+      const me=(await gh(API+'/user')).data;
+      status('Hi @'+me.login+' — listing your repos…');
+      let repos=await ghAll(API+'/user/repos?affiliation=owner&per_page=100&sort=pushed',5);
+      const since=new Date(Date.now()-366*86400000);
+      repos=repos.filter(r=>!r.fork&&new Date(r.pushed_at)>=since);
+      if(!repos.length)throw new Error('No repos with activity in the last year were found for @'+me.login+'.');
+
+      const counts={},repoTotals=[];const sinceISO=since.toISOString();
+      const seen=new Set();
+      let mine=0,ai=0,other=0;
+      let done=0;
+      const queue=repos.slice();
+
+      function tally(commits){
+        let n=0;
+        for(const c of commits){
+          if(seen.has(c.sha))continue;seen.add(c.sha);
+          const d=new Date(c.commit.author.date);
+          counts[dkey(d)]=(counts[dkey(d)]||0)+1;n++;
+          const linked=c.author&&c.author.login;
+          if(linked&&c.author.login.toLowerCase()===me.login.toLowerCase())mine++;
+          else{
+            const nm=(c.commit.author.name||'')+' '+(c.commit.author.email||'');
+            if(!linked&&(AI_RE.test(nm)||AI_EMAIL_RE.test(nm)))ai++;
+            else other++;
+          }
+        }
+        return n;
+      }
+
+      async function scanRepo(repo){
+        let n=0;
+        if(allBranches){
+          const branches=(await ghAll(API+'/repos/'+repo.full_name+'/branches?per_page=100',1)).slice(0,30);
+          for(const b of branches){
+            const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&sha='+encodeURIComponent(b.name)+'&per_page=100',8);
+            n+=tally(commits);
+          }
+        }else{
+          const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&per_page=100',15);
+          n=tally(commits);
+        }
+        return n;
+      }
+
+      async function worker(){
+        while(queue.length){
+          const repo=queue.shift();
+          status('Scanning '+(done+1)+'/'+repos.length+': '+repo.name+(allBranches?' (all branches)':'')+'…');
+          try{
+            const n=await scanRepo(repo);
+            if(n)repoTotals.push([repo.name,n]);
+          }catch(e){ if(/Rate limited|rejected/.test(e.message)) throw e; }
+          done++;progress(done/repos.length);
+        }
+      }
+      await Promise.all([worker(),worker(),worker(),worker()]);
+
+      render(me.login,counts,repoTotals,{mine,ai,other});
+      status('');
+      $('setup').style.display='none';
+      $('topbar').style.display='flex';
+      $('tb-user').innerHTML='<span class="ok">●</span> @'+me.login+' · '+repos.length+' repos scanned';
+    }catch(e){status(e.message,true)}
+    finally{$('go').disabled=false;progress(null)}
+  }
+
+  function computeStats(counts){
+    const today=new Date();today.setHours(0,0,0,0);
+    let cur=0,d=new Date(today);
+    if(!(counts[dkey(d)]>0))d.setDate(d.getDate()-1);
+    while(counts[dkey(d)]>0){cur++;d.setDate(d.getDate()-1)}
+    const start=new Date(today);start.setDate(start.getDate()-365);
+    let longest=0,runlen=0,total=0,active=0;
+    const iter=new Date(start);
+    while(iter<=today){
+      const c=counts[dkey(iter)]||0;total+=c;
+      if(c>0){active++;runlen++;longest=Math.max(longest,runlen)}else runlen=0;
+      iter.setDate(iter.getDate()+1);
+    }
+    return {cur,longest,total,active,today,start};
+  }
+
+  function render(login,counts,repoTotals,credit){
+    const st=computeStats(counts);
+    const {cur,longest,total,active,today,start}=st;
+    const todayCount=counts[dkey(today)]||0;
+    LAST={login,counts,st,credit,todayCount};
+
+    // risk banner
+    const risk=$('risk');
+    if(todayCount>0){
+      risk.className='risk safe';
+      risk.textContent='✓ '+todayCount+' commit'+(todayCount===1?'':'s')+' today — streak is safe.';
+    }else if(cur>0){
+      const mid=new Date(today);mid.setDate(mid.getDate()+1);
+      const hrs=Math.max(0,Math.floor((mid-Date.now())/3600000));
+      risk.className='risk warn';
+      risk.textContent='⚠ Streak at risk — no commits yet today. '+hrs+'h left to keep the '+cur+'-day fire alive.';
+    }else{
+      risk.className='risk';risk.textContent='';
+    }
+
+    $('cur').textContent=cur;
+    $('cursub').textContent=cur>0?('Keep it alive — commit today, @'+login+'.'):('One commit restarts the fire, @'+login+'.');
+    $('longest').textContent=longest;
+    $('total').textContent=total.toLocaleString();
+    $('active').textContent=active;
+
+    // compare
+    const you=credit.mine,rest=credit.ai+credit.other,sum=Math.max(1,you+rest);
+    const pctYou=Math.round(you/sum*100);
+    $('cmp-login').textContent='@'+login;
+    $('cmp-you').textContent=you.toLocaleString()+' ('+pctYou+'%)';
+    $('cmp-ai').textContent=rest.toLocaleString()+' ('+(100-pctYou)+'%)';
+    $('split-you').style.width=Math.max(2,pctYou)+'%';
+    $('split-ai').style.width=Math.max(2,100-pctYou)+'%';
+    $('cmp-punch').textContent=rest>you
+      ? 'GitHub\'s graph credits you for only '+pctYou+'% of your own work. The other '+rest.toLocaleString()+' commits? An AI took the byline.'
+      : (rest>0?'Nice — most of your commits carry your name. '+rest.toLocaleString()+' slipped away to unlinked authors.':'Every single commit is credited to you. Clean.');
+
+    renderDays(+$('dayrange').value||14);
+    renderHeat(+$('heatrange').value||12);
+
+    repoTotals.sort((a,b)=>b[1]-a[1]);
+    $('repos').innerHTML=repoTotals.map(([n,c])=>'<div class="repo"><span class="name">'+n.replace(/</g,'&lt;')+'</span><span class="cnt">'+c+'</span></div>').join('')||'<div class="repo"><span class="name">No commits found in the last year</span></div>';
+
+    $('results').style.display='block';
+  }
+
+  function renderDays(n){
+    if(!LAST)return;
+    const counts=LAST.counts,today=LAST.st.today;
+    const wrap=$('days14');wrap.innerHTML='';
+    wrap.style.gridTemplateColumns='repeat('+n+',1fr)';
+    wrap.classList.toggle('dense',n>21);
+    let maxc=1;
+    for(let i=0;i<n;i++){const dd=new Date(today);dd.setDate(dd.getDate()-i);maxc=Math.max(maxc,counts[dkey(dd)]||0)}
+    for(let i=n-1;i>=0;i--){
+      const dd=new Date(today);dd.setDate(dd.getDate()-i);
+      const c=counts[dkey(dd)]||0;
+      const el=document.createElement('div');
+      el.className='d14'+(c===0?' zero':'')+(i===0?' today':'');
+      el.title=dkey(dd)+': '+c+' commit'+(c===1?'':'s');
+      el.innerHTML='<div class="d14wrap"><div class="bar14" style="height:'+Math.max(3,Math.round(c/maxc*60))+'px"></div></div><div class="cnt">'+c+'</div><div class="dow">'+dd.toLocaleString('en',{weekday:'narrow'})+'</div>';
+      wrap.appendChild(el);
+    }
+  }
+
+  function renderHeat(months){
+    if(!LAST)return;
+    const counts=LAST.counts,today=LAST.st.today;
+    const startR=new Date(today);startR.setMonth(startR.getMonth()-months);startR.setDate(startR.getDate()+1);
+    const hstart=new Date(startR);hstart.setDate(hstart.getDate()-hstart.getDay());
+    const heat=$('heat');heat.innerHTML='';
+    const monthsEl=$('months');monthsEl.innerHTML='';
+    // thresholds from this range only, so shorter views get better contrast
+    const vals=[];const vi=new Date(startR);
+    while(vi<=today){const c=counts[dkey(vi)]||0;if(c>0)vals.push(c);vi.setDate(vi.getDate()+1)}
+    vals.sort((a,b)=>a-b);
+    const q=p=>vals.length?vals[Math.min(vals.length-1,Math.floor(p*vals.length))]:1;
+    const t1=Math.max(1,q(.25)),t2=Math.max(t1,q(.5)),t3=Math.max(t2,q(.75));
+    const it=new Date(hstart);let idx=0,cols=0,prevMonth=-1;const labels=[];
+    while(it<=today){
+      const col=Math.floor(idx/7);cols=col+1;
+      const c=counts[dkey(it)]||0;
+      const L=c<=0?0:c<=t1?1:c<=t2?2:c<=t3?3:4;
+      const cell=document.createElement('span');
+      cell.className='cell'+(L?' l'+L:'');
+      cell.title=dkey(it)+': '+c+' commit'+(c===1?'':'s');
+      heat.appendChild(cell);
+      if(it.getDate()===1||(idx===0&&it.getMonth()!==prevMonth)){
+        if(it.getMonth()!==prevMonth){labels.push([col,it.toLocaleString('en',{month:'short'})]);prevMonth=it.getMonth()}
+      }
+      idx++;it.setDate(it.getDate()+1);
+    }
+    monthsEl.style.width=(cols*14)+'px';
+    monthsEl.innerHTML=labels.map(([c,n])=>'<span style="position:absolute;left:'+(c*14)+'px">'+n+'</span>').join('');
+    document.querySelector('.heatwrap').scrollLeft=99999;
+  }
+
+  /* ---------- share card ---------- */
+  async function drawCard(){
+    if(!LAST)return null;
+    const {login,counts,st,credit}=LAST;
+    const cv=$('cardcv'),ctx=cv.getContext('2d');
+    try{await document.fonts.load('800 150px "JetBrains Mono"');await document.fonts.load('600 34px "JetBrains Mono"');await document.fonts.load('400 30px "JetBrains Mono"');}catch(e){}
+    const W=1080,H=1080,P=76;
+    // bg
+    ctx.fillStyle='#0F1319';ctx.fillRect(0,0,W,H);
+    // top prompt
+    ctx.font='600 34px "JetBrains Mono",monospace';
+    ctx.fillStyle='#FF8A2A';ctx.fillText('$',P,P+30);
+    ctx.fillStyle='#97A0AC';ctx.fillText('git streak --mine',P+34,P+30);
+    // big number with gradient
+    const grad=ctx.createLinearGradient(P,0,700,0);
+    grad.addColorStop(0,'#FF8A2A');grad.addColorStop(1,'#FFC46B');
+    ctx.font='800 190px "JetBrains Mono",monospace';
+    ctx.fillStyle=grad;
+    const numStr=String(st.cur);
+    ctx.fillText(numStr,P-8,P+236);
+    const numW=ctx.measureText(numStr).width;
+    ctx.font='600 44px "JetBrains Mono",monospace';
+    ctx.fillStyle='#97A0AC';ctx.fillText('day streak',P+numW+14,P+228);
+    // sub stats line
+    ctx.font='400 32px "JetBrains Mono",monospace';
+    ctx.fillStyle='#E9E4DA';
+    ctx.fillText(st.total.toLocaleString()+' commits · '+st.active+' active days · best '+st.longest,P,P+310);
+    // credit punchline
+    const sum=Math.max(1,credit.mine+credit.ai+credit.other);
+    const pctAI=Math.round((credit.ai+credit.other)/sum*100);
+    ctx.fillStyle='#FFC46B';
+    if(pctAI>0){
+      ctx.fillText('AI took author credit for '+pctAI+'% of these.',P,P+364);
+      ctx.fillStyle='#97A0AC';
+      ctx.fillText('All of them are mine.',P,P+412);
+    }
+    // heatmap: last 26 weeks
+    const cell=26,gap=7,rows=7,cols=26;
+    const gridW=cols*(cell+gap)-gap;
+    const gx=(W-gridW)/2,gy=560;
+    const today=st.today;
+    const hstart=new Date(today);hstart.setDate(hstart.getDate()-(cols*7-1));
+    hstart.setDate(hstart.getDate()-hstart.getDay());
+    const vals=Object.values(counts).filter(v=>v>0).sort((a,b)=>a-b);
+    const q=p=>vals.length?vals[Math.min(vals.length-1,Math.floor(p*vals.length))]:1;
+    const t1=Math.max(1,q(.25)),t2=Math.max(t1,q(.5)),t3=Math.max(t2,q(.75));
+    const colors=['#1B222C','#3B2313','#7A3E14','#C06318','#FF8A2A'];
+    const it=new Date(hstart);
+    for(let c2=0;c2<cols;c2++){
+      for(let r=0;r<rows;r++){
+        if(it>today)break;
+        const n=counts[dkey(it)]||0;
+        const L=n<=0?0:n<=t1?1:n<=t2?2:n<=t3?3:4;
+        ctx.fillStyle=colors[L];
+        roundRect(ctx,gx+c2*(cell+gap),gy+r*(cell+gap),cell,cell,6);
+        it.setDate(it.getDate()+1);
+      }
+    }
+    // footer
+    ctx.font='600 34px "JetBrains Mono",monospace';
+    ctx.fillStyle='#E9E4DA';ctx.fillText('@'+login,P,H-P-8);
+    ctx.font='400 28px "JetBrains Mono",monospace';
+    ctx.fillStyle='#97A0AC';
+    const url=location.host?(location.host+location.pathname).replace(/\/$/,''):'realstreak';
+    const uw=ctx.measureText(url).width;
+    ctx.fillText(url,W-P-uw,H-P-8);
+    return cv;
+  }
+  function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.fill()}
+
+  async function cardBlob(){
+    const cv=await drawCard();if(!cv)return null;
+    return new Promise(res=>cv.toBlob(res,'image/png'));
+  }
+  $('sharecard').addEventListener('click',async()=>{
+    const blob=await cardBlob();if(!blob){status('Compute your streak first.',true);return}
+    const file=new File([blob],'real-streak.png',{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      try{await navigator.share({files:[file],title:'My Real Streak',text:'My real GitHub streak — counted even when the AI takes author credit.'})}catch(e){}
+    }else{downloadBlob(blob)}
+  });
+  $('downloadcard').addEventListener('click',async()=>{
+    const blob=await cardBlob();if(!blob){status('Compute your streak first.',true);return}
+    downloadBlob(blob);
+  });
+  function downloadBlob(blob){
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='real-streak.png';a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  }
+
+  $('go').addEventListener('click',run);
+  $('token').addEventListener('keydown',e=>{if(e.key==='Enter')run()});
+  $('settingsbtn').addEventListener('click',()=>{
+    const s=$('setup');s.style.display=s.style.display==='none'?'block':'none';
+  });
+  $('dayrange').addEventListener('change',()=>renderDays(+$('dayrange').value));
+  $('heatrange').addEventListener('change',()=>renderHeat(+$('heatrange').value));
+})();
+</script>
+</body>
+</html>

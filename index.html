@@ -65,7 +65,8 @@
   .big{font-family:var(--mono);font-weight:800;font-size:clamp(56px,16vw,96px);line-height:1;letter-spacing:-.04em;background:linear-gradient(100deg,var(--accent) 10%,var(--accent-soft) 90%);-webkit-background-clip:text;background-clip:text;color:transparent}
   .big small{font-size:.32em;color:var(--muted);-webkit-text-fill-color:var(--muted);font-weight:600;letter-spacing:0}
   .substat{margin-top:6px;font-size:14px;color:var(--muted)}
-  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+  .grid3{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
+  @media(min-width:640px){.grid3{grid-template-columns:repeat(4,1fr)}}
   .mini{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px}
   .mini .n{font-family:var(--mono);font-weight:800;font-size:24px}
   .mini .l{font-size:12px;color:var(--muted);margin-top:2px}
@@ -166,6 +167,7 @@
       <div class="mini"><div class="n" id="longest">0</div><div class="l">longest streak</div></div>
       <div class="mini"><div class="n" id="total">0</div><div class="l">commits · 1yr</div></div>
       <div class="mini"><div class="n" id="active">0</div><div class="l">active days</div></div>
+      <div class="mini"><div class="n" id="locn">—</div><div class="l" id="locl">lines added · 1yr</div></div>
     </div>
     <div class="sharebar">
       <button class="primary" id="sharecard">Share streak card</button>
@@ -229,6 +231,49 @@
   async function ghAll(url,cap){
     let out=[],u=url,pages=0;
     while(u&&pages<cap){const{data,link}=await gh(u);out=out.concat(data);u=nextUrl(link);pages++;}
+    return out;
+  }
+  async function ghRaw(url){
+    const r=await fetch(url,{headers:{'Authorization':'Bearer '+TOKEN,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}});
+    if(r.status===401)throw new Error('Token rejected (401).');
+    if(r.status===403||r.status===429)throw new Error('Rate limited by GitHub.');
+    return {status:r.status,data:r.status===200?await r.json():null};
+  }
+  const fmt=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(n);
+
+  // lines of code via one stats call per repo; GitHub returns 202 while it
+  // computes cold caches, so retry those once after a pause
+  async function fetchLoc(repos,sinceMs,onProgress){
+    const out={};
+    async function one(repo){
+      try{
+        const {status,data}=await ghRaw(API+'/repos/'+repo.full_name+'/stats/code_frequency');
+        if(status===200&&Array.isArray(data)){
+          let a=0,d=0;
+          for(const row of data){if(row[0]*1000>=sinceMs){a+=row[1];d+=Math.abs(row[2])}}
+          out[repo.name]={a,d};
+          return true;
+        }
+        return status!==202; // 202 => not ready, retry later
+      }catch(e){if(/Rate limited|rejected/.test(e.message))throw e;return true}
+    }
+    let pendingRetry=[];
+    let done=0;
+    const queue=repos.slice();
+    async function worker(){
+      while(queue.length){
+        const repo=queue.shift();
+        const ok=await one(repo);
+        if(!ok)pendingRetry.push(repo);
+        done++;onProgress&&onProgress(done/repos.length);
+      }
+    }
+    await Promise.all([worker(),worker(),worker(),worker()]);
+    if(pendingRetry.length){
+      await new Promise(r=>setTimeout(r,3500));
+      const q2=pendingRetry;pendingRetry=[];
+      await Promise.all(q2.map(one));
+    }
     return out;
   }
 
@@ -302,7 +347,14 @@
       }
       await Promise.all([worker(),worker(),worker(),worker()]);
 
-      render(me.login,counts,repoTotals,{mine,ai,other});
+      status('Counting lines of code…');progress(0);
+      const scanned=new Set(repoTotals.map(r=>r[0]));
+      const locRepos=repos.filter(r=>scanned.has(r.name));
+      const repoLoc=await fetchLoc(locRepos,since.getTime(),p=>progress(p));
+      let adds=0,dels=0,locMissing=0;
+      for(const r of locRepos){const l=repoLoc[r.name];if(l){adds+=l.a;dels+=l.d}else locMissing++}
+
+      render(me.login,counts,repoTotals,{mine,ai,other},{adds,dels,locMissing,repoLoc});
       status('');
       $('setup').style.display='none';
       $('topbar').style.display='flex';
@@ -327,11 +379,11 @@
     return {cur,longest,total,active,today,start};
   }
 
-  function render(login,counts,repoTotals,credit){
+  function render(login,counts,repoTotals,credit,loc){
     const st=computeStats(counts);
     const {cur,longest,total,active,today,start}=st;
     const todayCount=counts[dkey(today)]||0;
-    LAST={login,counts,st,credit,todayCount};
+    LAST={login,counts,st,credit,todayCount,loc};
 
     // risk banner
     const risk=$('risk');
@@ -352,6 +404,14 @@
     $('longest').textContent=longest;
     $('total').textContent=total.toLocaleString();
     $('active').textContent=active;
+    if(loc&&(loc.adds||loc.dels)){
+      $('locn').textContent='+'+fmt(loc.adds);
+      $('locl').textContent='lines added · −'+fmt(loc.dels)+' removed'+(loc.locMissing?' *':'');
+      $('locl').title=loc.locMissing?loc.locMissing+' repo(s) still computing on GitHub\u2019s side — recompute in a minute for full numbers':'';
+    }else{
+      $('locn').textContent='—';
+      $('locl').textContent='lines: recompute in 1 min';
+    }
 
     // compare
     const you=credit.mine,rest=credit.ai+credit.other,sum=Math.max(1,you+rest);
@@ -369,7 +429,11 @@
     renderHeat(+$('heatrange').value||12);
 
     repoTotals.sort((a,b)=>b[1]-a[1]);
-    $('repos').innerHTML=repoTotals.map(([n,c])=>'<div class="repo"><span class="name">'+n.replace(/</g,'&lt;')+'</span><span class="cnt">'+c+'</span></div>').join('')||'<div class="repo"><span class="name">No commits found in the last year</span></div>';
+    $('repos').innerHTML=repoTotals.map(([n,c])=>{
+      const l=loc&&loc.repoLoc&&loc.repoLoc[n];
+      const locStr=l?' <span style="color:var(--muted);font-weight:400;font-size:12px">+'+fmt(l.a)+' −'+fmt(l.d)+'</span>':'';
+      return '<div class="repo"><span class="name">'+n.replace(/</g,'&lt;')+'</span><span class="cnt">'+c+locStr+'</span></div>';
+    }).join('')||'<div class="repo"><span class="name">No commits found in the last year</span></div>';
 
     $('results').style.display='block';
     requestAnimationFrame(()=>{const h=document.querySelector('.heatwrap');h.scrollLeft=h.scrollWidth});
@@ -452,7 +516,8 @@
     // sub stats line
     ctx.font='400 32px "JetBrains Mono",monospace';
     ctx.fillStyle='#E9E4DA';
-    ctx.fillText(st.total.toLocaleString()+' commits · '+st.active+' active days · best '+st.longest,P,P+310);
+    const locBit=(LAST.loc&&LAST.loc.adds)?' · +'+fmt(LAST.loc.adds)+' lines':'';
+    ctx.fillText(st.total.toLocaleString()+' commits'+locBit+' · best '+st.longest+'-day run',P,P+310);
     // credit punchline
     const sum=Math.max(1,credit.mine+credit.ai+credit.other);
     const pctAI=Math.round((credit.ai+credit.other)/sum*100);

@@ -101,6 +101,9 @@
   select{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:13px;border-radius:8px;padding:3px 6px;outline:none}
   select:focus{border-color:var(--accent)}
   .days14.dense .cnt,.days14.dense .dow{display:none}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;vertical-align:middle;margin-left:8px}
+  .seg button{background:transparent;border:0;color:var(--muted);font-family:var(--mono);font-size:12px;padding:5px 10px;cursor:pointer}
+  .seg button.on{background:var(--surface2);color:var(--accent-soft)}
   .heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px;width:max-content}
   .cell{width:11px;height:11px;border-radius:2.5px;background:var(--l0)}
   .cell.l1{background:var(--l1)}.cell.l2{background:var(--l2)}.cell.l3{background:var(--l3)}.cell.l4{background:var(--l4)}
@@ -182,7 +185,7 @@
       <div class="punch" id="cmp-punch"></div>
     </div>
 
-    <div class="section-h"><span class="dollar">&gt;</span> last <select id="dayrange"><option value="7">7</option><option value="14" selected>14</option><option value="30">30</option><option value="60">60</option></select> days</div>
+    <div class="section-h"><span class="dollar">&gt;</span> last <select id="dayrange"><option value="7">7</option><option value="14" selected>14</option><option value="30">30</option><option value="60">60</option></select> days<span class="seg"><button id="mode-c" class="on">commits</button><button id="mode-l">lines</button></span></div>
     <div class="days14" id="days14"></div>
 
     <div class="section-h"><span class="dollar">&gt;</span> last <select id="heatrange"><option value="3">3</option><option value="6">6</option><option value="12" selected>12</option></select> months</div>
@@ -206,6 +209,9 @@
   const API='https://api.github.com';
   let TOKEN='';
   let LAST=null; // computed results for share card
+  let DAYMODE='c'; // 'c' commits | 'l' lines
+  let DAYC={};     // date -> [[repoFullName, sha], ...]
+  const SHALOC={}; // sha -> lines added (cached across toggles)
 
   const store={
     get k(){try{return localStorage.getItem('rs_token')||''}catch(e){return ''}},
@@ -298,16 +304,19 @@
 
       const counts={},repoTotals=[];const sinceISO=since.toISOString();
       const seen=new Set();
+      DAYC={};
       let mine=0,ai=0,other=0;
       let done=0;
       const queue=repos.slice();
 
-      function tally(commits){
+      function tally(commits,repoFull){
         let n=0;
         for(const c of commits){
           if(seen.has(c.sha))continue;seen.add(c.sha);
           const d=new Date(c.commit.author.date);
-          counts[dkey(d)]=(counts[dkey(d)]||0)+1;n++;
+          const k=dkey(d);
+          counts[k]=(counts[k]||0)+1;n++;
+          (DAYC[k]=DAYC[k]||[]).push([repoFull,c.sha]);
           const linked=c.author&&c.author.login;
           if(linked&&c.author.login.toLowerCase()===me.login.toLowerCase())mine++;
           else{
@@ -325,11 +334,11 @@
           const branches=(await ghAll(API+'/repos/'+repo.full_name+'/branches?per_page=100',1)).slice(0,30);
           for(const b of branches){
             const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&sha='+encodeURIComponent(b.name)+'&per_page=100',8);
-            n+=tally(commits);
+            n+=tally(commits,repo.full_name);
           }
         }else{
           const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&per_page=100',15);
-          n=tally(commits);
+          n=tally(commits,repo.full_name);
         }
         return n;
       }
@@ -441,21 +450,75 @@
 
   function renderDays(n){
     if(!LAST)return;
+    if(DAYMODE==='l'){renderDaysLines(n);return}
     const counts=LAST.counts,today=LAST.st.today;
+    drawDayBars(n,i=>{const dd=new Date(today);dd.setDate(dd.getDate()-i);return counts[dkey(dd)]||0},v=>String(v));
+  }
+
+  function drawDayBars(n,valueAt,label){
+    const today=LAST.st.today;
     const wrap=$('days14');wrap.innerHTML='';
     wrap.style.gridTemplateColumns='repeat('+n+',1fr)';
     wrap.classList.toggle('dense',n>21);
     let maxc=1;
-    for(let i=0;i<n;i++){const dd=new Date(today);dd.setDate(dd.getDate()-i);maxc=Math.max(maxc,counts[dkey(dd)]||0)}
+    for(let i=0;i<n;i++)maxc=Math.max(maxc,valueAt(i));
     for(let i=n-1;i>=0;i--){
       const dd=new Date(today);dd.setDate(dd.getDate()-i);
-      const c=counts[dkey(dd)]||0;
+      const v=valueAt(i);
       const el=document.createElement('div');
-      el.className='d14'+(c===0?' zero':'')+(i===0?' today':'');
-      el.title=dkey(dd)+': '+c+' commit'+(c===1?'':'s');
-      el.innerHTML='<div class="d14wrap"><div class="bar14" style="height:'+Math.max(3,Math.round(c/maxc*60))+'px"></div></div><div class="cnt">'+c+'</div><div class="dow">'+dd.toLocaleString('en',{weekday:'narrow'})+'</div>';
+      el.className='d14'+(v===0?' zero':'')+(i===0?' today':'');
+      el.title=dkey(dd)+': '+label(v);
+      el.innerHTML='<div class="d14wrap"><div class="bar14" style="height:'+Math.max(3,Math.round(v/maxc*60))+'px"></div></div><div class="cnt">'+label(v)+'</div><div class="dow">'+dd.toLocaleString('en',{weekday:'narrow'})+'</div>';
       wrap.appendChild(el);
     }
+  }
+
+  let LINESBUSY=false;
+  async function renderDaysLines(n){
+    if(LINESBUSY)return;
+    const today=LAST.st.today;
+    // gather commits in range
+    const inRange=[];const need=[];
+    for(let i=0;i<n;i++){
+      const dd=new Date(today);dd.setDate(dd.getDate()-i);
+      for(const pair of (DAYC[dkey(dd)]||[])){inRange.push(pair);if(!(pair[1] in SHALOC))need.push(pair)}
+    }
+    if(inRange.length>1200){
+      status('That\'s '+inRange.length+' commits — too many API calls for line counting. Use a 7 or 14 day range for lines.',true);
+      DAYMODE='c';syncSeg();renderDays(n);return;
+    }
+    if(need.length){
+      LINESBUSY=true;
+      try{
+        status('Fetching line stats for '+need.length+' commits (one-time, then cached)…');progress(0);
+        let done=0;const q=need.slice();
+        async function w(){
+          while(q.length){
+            const [f,sha]=q.shift();
+            const {status:st2,data}=await ghRaw(API+'/repos/'+f+'/commits/'+sha);
+            SHALOC[sha]=(st2===200&&data&&data.stats)?data.stats.additions:0;
+            done++;progress(done/need.length);
+          }
+        }
+        await Promise.all([w(),w(),w(),w(),w(),w()]);
+        status('');progress(null);
+      }catch(e){
+        status(e.message,true);progress(null);LINESBUSY=false;
+        DAYMODE='c';syncSeg();renderDays(n);return;
+      }
+      LINESBUSY=false;
+    }
+    const dayLoc={};
+    for(let i=0;i<n;i++){
+      const dd=new Date(today);const k=(dd.setDate(dd.getDate()-i),dkey(dd));
+      dayLoc[i]=(DAYC[k]||[]).reduce((s,p)=>s+(SHALOC[p[1]]||0),0);
+    }
+    drawDayBars(n,i=>dayLoc[i]||0,v=>'+'+fmt(v));
+  }
+
+  function syncSeg(){
+    $('mode-c').classList.toggle('on',DAYMODE==='c');
+    $('mode-l').classList.toggle('on',DAYMODE==='l');
   }
 
   function renderHeat(months){
@@ -588,6 +651,8 @@
   });
   $('dayrange').addEventListener('change',()=>renderDays(+$('dayrange').value));
   $('heatrange').addEventListener('change',()=>renderHeat(+$('heatrange').value));
+  $('mode-c').addEventListener('click',()=>{if(DAYMODE==='c')return;DAYMODE='c';syncSeg();renderDays(+$('dayrange').value)});
+  $('mode-l').addEventListener('click',()=>{if(DAYMODE==='l')return;if(!LAST){return}DAYMODE='l';syncSeg();renderDays(+$('dayrange').value)});
 })();
 </script>
 </body>

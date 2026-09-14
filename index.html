@@ -328,17 +328,24 @@
         return n;
       }
 
+      let branchBudget=2500,branchesPartial=false;
       async function scanRepo(repo){
-        let n=0;
+        // always scan the default branch first — the branch list is alphabetical
+        // and capped, so main/master can otherwise get crowded out
+        const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&per_page=100',15);
+        let n=tally(commits,repo.full_name);
         if(allBranches){
-          const branches=(await ghAll(API+'/repos/'+repo.full_name+'/branches?per_page=100',1)).slice(0,30);
+          const branches=(await ghAll(API+'/repos/'+repo.full_name+'/branches?per_page=100',3))
+            .filter(b=>b.name!==repo.default_branch);
           for(const b of branches){
-            const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&sha='+encodeURIComponent(b.name)+'&per_page=100',8);
-            n+=tally(commits,repo.full_name);
+            // if this branch's tip commit is already counted, the whole branch
+            // is contained in history we've scanned — skip it for free
+            if(b.commit&&seen.has(b.commit.sha))continue;
+            if(branchBudget<=0){branchesPartial=true;break}
+            branchBudget--;
+            const bc=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&sha='+encodeURIComponent(b.name)+'&per_page=100',8);
+            n+=tally(bc,repo.full_name);
           }
-        }else{
-          const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&per_page=100',15);
-          n=tally(commits,repo.full_name);
         }
         return n;
       }
@@ -367,7 +374,7 @@
       status('');
       $('setup').style.display='none';
       $('topbar').style.display='flex';
-      $('tb-user').innerHTML='<span class="ok">●</span> @'+me.login+' · '+repos.length+' repos scanned';
+      $('tb-user').innerHTML='<span class="ok">●</span> @'+me.login+' · '+repos.length+' repos scanned'+(branchesPartial?' · branch scan truncated (API budget)':'');
     }catch(e){status(e.message,true)}
     finally{$('go').disabled=false;progress(null)}
   }
@@ -401,9 +408,11 @@
       risk.textContent='✓ '+todayCount+' commit'+(todayCount===1?'':'s')+' today — streak is safe.';
     }else if(cur>0){
       const mid=new Date(today);mid.setDate(mid.getDate()+1);
-      const hrs=Math.max(0,Math.floor((mid-Date.now())/3600000));
+      const msLeft=Math.max(0,mid-Date.now());
+      const hrs=Math.floor(msLeft/3600000);
+      const timeLeft=hrs>=1?hrs+'h':Math.max(1,Math.round(msLeft/60000))+'m';
       risk.className='risk warn';
-      risk.textContent='⚠ Streak at risk — no commits yet today. '+hrs+'h left to keep the '+cur+'-day fire alive.';
+      risk.textContent='⚠ Streak at risk — no commits yet today. '+timeLeft+' left to keep the '+cur+'-day fire alive.';
     }else{
       risk.className='risk';risk.textContent='';
     }

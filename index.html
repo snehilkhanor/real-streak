@@ -234,9 +234,14 @@
     return {data:await r.json(),link:r.headers.get('Link')};
   }
   function nextUrl(link){if(!link)return null;const m=link.split(',').find(p=>p.includes('rel="next"'));return m?m.match(/<([^>]+)>/)[1]:null}
-  async function ghAll(url,cap){
+  // stopWhen(page) lets a caller end pagination early (e.g. once a branch
+  // walks back into history that's already been counted)
+  async function ghAll(url,cap,stopWhen){
     let out=[],u=url,pages=0;
-    while(u&&pages<cap){const{data,link}=await gh(u);out=out.concat(data);u=nextUrl(link);pages++;}
+    while(u&&pages<cap){
+      const{data,link}=await gh(u);out=out.concat(data);u=nextUrl(link);pages++;
+      if(stopWhen&&Array.isArray(data)&&stopWhen(data))break;
+    }
     return out;
   }
   async function ghRaw(url){
@@ -332,7 +337,7 @@
       async function scanRepo(repo){
         // always scan the default branch first — the branch list is alphabetical
         // and capped, so main/master can otherwise get crowded out
-        const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&per_page=100',15);
+        const commits=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&per_page=100',200);
         let n=tally(commits,repo.full_name);
         if(allBranches){
           const branches=(await ghAll(API+'/repos/'+repo.full_name+'/branches?per_page=100',3))
@@ -343,7 +348,7 @@
             if(b.commit&&seen.has(b.commit.sha))continue;
             if(branchBudget<=0){branchesPartial=true;break}
             branchBudget--;
-            const bc=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&sha='+encodeURIComponent(b.name)+'&per_page=100',8);
+            const bc=await ghAll(API+'/repos/'+repo.full_name+'/commits?since='+sinceISO+'&sha='+encodeURIComponent(b.name)+'&per_page=100',200,page=>page.every(c=>seen.has(c.sha)));
             n+=tally(bc,repo.full_name);
           }
         }

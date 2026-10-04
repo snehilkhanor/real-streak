@@ -142,7 +142,7 @@
     </div>
     <div class="checks">
       <span class="check"><input type="checkbox" id="remember"><label for="remember" style="all:unset;cursor:pointer">Remember token on this device</label></span>
-      <span class="check"><input type="checkbox" id="allbranches"><label for="allbranches" style="all:unset;cursor:pointer">Scan all branches (slower, most complete)</label></span>
+      <span class="check"><input type="checkbox" id="allbranches" checked><label for="allbranches" style="all:unset;cursor:pointer">Count commits on all branches</label></span>
     </div>
     <p class="privacy"><b>Your token never leaves this browser.</b> This page has no server — it calls api.github.com directly from your device. Nothing is logged or stored anywhere else. <a href="#" id="viewsrc" style="color:var(--accent-soft)">Verify: view source</a>.</p>
     <details class="howto">
@@ -219,6 +219,7 @@
   };
   const saved=store.k;
   if(saved){$('token').value=saved;$('remember').checked=true;}
+  try{const ab=localStorage.getItem('rs_allbr');if(ab!==null)$('allbranches').checked=ab==='1'}catch(e){}
 
   $('viewsrc').addEventListener('click',e=>{e.preventDefault();alert('On GitHub Pages, this page is a single index.html in a public repo — open the repo to read every line. Ctrl+U / long-press → view source also works.')});
 
@@ -297,6 +298,7 @@
     if(!TOKEN){status('Paste a token first.',true);return}
     store.set($('remember').checked?TOKEN:'');
     const allBranches=$('allbranches').checked;
+    try{localStorage.setItem('rs_allbr',allBranches?'1':'0')}catch(e){}
     $('go').disabled=true;$('results').style.display='none';progress(0);
     try{
       status('Checking token…');
@@ -404,7 +406,7 @@
     const st=computeStats(counts);
     const {cur,longest,total,active,today,start}=st;
     const todayCount=counts[dkey(today)]||0;
-    LAST={login,counts,st,credit,todayCount,loc};
+    LAST={login,counts,st,credit,todayCount,loc,projects:repoTotals.length};
 
     // risk banner
     const risk=$('risk');
@@ -570,73 +572,91 @@
   /* ---------- share card ---------- */
   async function drawCard(){
     if(!LAST)return null;
-    const {login,counts,st,credit}=LAST;
+    const {login,counts,st,loc,projects}=LAST;
     const cv=$('cardcv'),ctx=cv.getContext('2d');
     try{await document.fonts.load('800 150px "JetBrains Mono"');await document.fonts.load('600 34px "JetBrains Mono"');await document.fonts.load('400 30px "JetBrains Mono"');}catch(e){}
-    const W=1080,H=1080,P=76;
-    // bg
+    const W=1080,H=1080,P=76,M='"JetBrains Mono",monospace';
     ctx.fillStyle='#0F1319';ctx.fillRect(0,0,W,H);
-    // top prompt
-    ctx.font='600 34px "JetBrains Mono",monospace';
+
+    // header
+    ctx.font='600 34px '+M;
     ctx.fillStyle='#FF8A2A';ctx.fillText('$',P,P+30);
-    ctx.fillStyle='#97A0AC';ctx.fillText('git streak --mine',P+34,P+30);
-    // big number with gradient
+    ctx.fillStyle='#97A0AC';ctx.fillText('coding streak',P+34,P+30);
+
+    // hero number
     const grad=ctx.createLinearGradient(P,0,700,0);
     grad.addColorStop(0,'#FF8A2A');grad.addColorStop(1,'#FFC46B');
-    ctx.font='800 190px "JetBrains Mono",monospace';
-    ctx.fillStyle=grad;
+    ctx.font='800 200px '+M;ctx.fillStyle=grad;
     const numStr=String(st.cur);
-    ctx.fillText(numStr,P-8,P+236);
+    ctx.fillText(numStr,P-8,340);
     const numW=ctx.measureText(numStr).width;
-    ctx.font='600 44px "JetBrains Mono",monospace';
-    ctx.fillStyle='#97A0AC';ctx.fillText('day streak',P+numW+14,P+228);
-    // sub stats line
-    ctx.font='400 32px "JetBrains Mono",monospace';
-    ctx.fillStyle='#E9E4DA';
-    const locBit=(LAST.loc&&LAST.loc.adds)?' · +'+fmt(LAST.loc.adds)+' lines':'';
-    ctx.fillText(st.total.toLocaleString()+' commits'+locBit+' · best '+st.longest+'-day run',P,P+310);
-    // credit punchline
-    const sum=Math.max(1,credit.mine+credit.ai+credit.other);
-    const pctAI=Math.round((credit.ai+credit.other)/sum*100);
-    ctx.fillStyle='#FFC46B';
-    if(pctAI>0){
-      ctx.fillText('AI took author credit for '+pctAI+'% of these.',P,P+364);
-      ctx.fillStyle='#97A0AC';
-      ctx.fillText('All of them are mine.',P,P+412);
-    }
-    // heatmap: last 26 weeks
-    const cell=26,gap=7,rows=7,cols=26;
-    const gridW=cols*(cell+gap)-gap;
-    const gx=(W-gridW)/2,gy=560;
+    ctx.font='600 48px '+M;ctx.fillStyle='#97A0AC';
+    ctx.fillText('day streak',P+numW+18,332);
+
+    // stat tiles
+    const tiles=[[st.total.toLocaleString(),'commits']];
+    if(loc&&loc.adds)tiles.push(['+'+fmt(loc.adds),'lines added']);
+    if(projects)tiles.push([String(projects),projects===1?'project':'projects']);
+    tiles.push([String(st.active),'active days']);
+    if(st.longest>st.cur)tiles.push([st.longest+'d','best run']);
+    const tg=16,tw=(W-2*P-tg*(tiles.length-1))/tiles.length,ty=400,th=160;
+    // one shared font size for all values and one for all labels, so tiles look uniform
+    const pad=tiles.length>4?20:24;
+    const fit=(txt,start,min,weight)=>{let f=start;ctx.font=weight+' '+f+'px '+M;while(ctx.measureText(txt).width>tw-2*pad&&f>min){f--;ctx.font=weight+' '+f+'px '+M}return f};
+    const vfs=Math.min(...tiles.map(t=>fit(t[0],56,30,'800')));
+    const lfs=Math.min(...tiles.map(t=>fit(t[1],24,16,'400')));
+    tiles.forEach(([v,l],i)=>{
+      const x=P+i*(tw+tg);
+      ctx.fillStyle='#171D26';rr(ctx,x,ty,tw,th,18);ctx.fill();
+      ctx.strokeStyle='#242E3B';ctx.lineWidth=2;rr(ctx,x,ty,tw,th,18);ctx.stroke();
+      ctx.fillStyle='#FF8A2A';rr(ctx,x+pad,ty+26,34,5,2.5);ctx.fill();
+      ctx.font='800 '+vfs+'px '+M;ctx.fillStyle='#E9E4DA';ctx.fillText(v,x+pad,ty+100);
+      ctx.font='400 '+lfs+'px '+M;ctx.fillStyle='#97A0AC';ctx.fillText(l,x+pad,ty+138);
+    });
+
+    // 12-month heatmap
     const today=st.today;
-    const hstart=new Date(today);hstart.setDate(hstart.getDate()-(cols*7-1));
-    hstart.setDate(hstart.getDate()-hstart.getDay());
+    const start=new Date(today);start.setDate(start.getDate()-364);
+    const hstart=new Date(start);hstart.setDate(hstart.getDate()-hstart.getDay());
+    const cols=Math.floor(Math.round((today-hstart)/86400000)/7)+1;
+    const pitch=(W-2*P)/cols,cell=pitch-4,gx=P,gy=682;
     const vals=Object.values(counts).filter(v=>v>0).sort((a,b)=>a-b);
     const q=p=>vals.length?vals[Math.min(vals.length-1,Math.floor(p*vals.length))]:1;
     const t1=Math.max(1,q(.25)),t2=Math.max(t1,q(.5)),t3=Math.max(t2,q(.75));
     const colors=['#1B222C','#3B2313','#7A3E14','#C06318','#FF8A2A'];
-    const it=new Date(hstart);
-    for(let c2=0;c2<cols;c2++){
-      for(let r=0;r<rows;r++){
+    const it=new Date(hstart);let lastLabel=-9;
+    for(let c=0;c<cols;c++){
+      for(let r=0;r<7;r++){
         if(it>today)break;
-        const n=counts[dkey(it)]||0;
+        if(it.getDate()===1&&c-lastLabel>=3){
+          ctx.font='400 19px '+M;ctx.fillStyle='#5E6773';
+          ctx.fillText(it.toLocaleString('en',{month:'short'}),gx+c*pitch,gy-14);lastLabel=c;
+        }
+        const n=it<start?0:(counts[dkey(it)]||0);
         const L=n<=0?0:n<=t1?1:n<=t2?2:n<=t3?3:4;
-        ctx.fillStyle=colors[L];
-        roundRect(ctx,gx+c2*(cell+gap),gy+r*(cell+gap),cell,cell,6);
+        ctx.fillStyle=colors[L];rr(ctx,gx+c*pitch,gy+r*pitch,cell,cell,3);ctx.fill();
         it.setDate(it.getDate()+1);
       }
     }
+    // caption + legend under the grid
+    const gb=gy+7*pitch-4+40;
+    ctx.font='400 20px '+M;ctx.fillStyle='#5E6773';
+    ctx.fillText('last 12 months',gx,gb);
+    const ls=16,lgap=5,moreW=ctx.measureText('more').width,lessW=ctx.measureText('less').width;
+    const lx=W-P-moreW-10-(5*(ls+lgap)-lgap);
+    ctx.fillText('less',lx-lessW-10,gb);
+    ctx.fillText('more',W-P-moreW,gb);
+    colors.forEach((col,i)=>{ctx.fillStyle=col;rr(ctx,lx+i*(ls+lgap),gb-ls+1,ls,ls,3);ctx.fill()});
+
     // footer
-    ctx.font='600 34px "JetBrains Mono",monospace';
+    ctx.font='600 34px '+M;
     ctx.fillStyle='#E9E4DA';ctx.fillText('@'+login,P,H-P-8);
-    ctx.font='400 28px "JetBrains Mono",monospace';
-    ctx.fillStyle='#97A0AC';
+    ctx.font='400 28px '+M;ctx.fillStyle='#97A0AC';
     const url=location.host?(location.host+location.pathname).replace(/\/$/,''):'realstreak';
-    const uw=ctx.measureText(url).width;
-    ctx.fillText(url,W-P-uw,H-P-8);
+    ctx.fillText(url,W-P-ctx.measureText(url).width,H-P-8);
     return cv;
   }
-  function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.fill()}
+  function rr(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
 
   async function cardBlob(){
     const cv=await drawCard();if(!cv)return null;

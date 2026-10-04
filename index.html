@@ -593,24 +593,34 @@
     ctx.font='600 48px '+M;ctx.fillStyle='#97A0AC';
     ctx.fillText('day streak',P+numW+18,322);
 
-    // stat tiles
-    const tiles=[[st.total.toLocaleString(),'commits']];
-    if(loc&&loc.adds)tiles.push(['+'+fmt(loc.adds),'lines added']);
-    if(projects)tiles.push([String(projects),projects===1?'project':'projects']);
-    tiles.push([String(st.active),'active days']);
-    if(st.longest>st.cur)tiles.push([st.longest+'d','best run']);
-    const tg=16,tw=(W-2*P-tg*(tiles.length-1))/tiles.length,ty=378,th=140;
-    const pad=tiles.length>4?20:24;
-    const fit=(txt,start,min,weight)=>{let f=start;ctx.font=weight+' '+f+'px '+M;while(ctx.measureText(txt).width>tw-2*pad&&f>min){f--;ctx.font=weight+' '+f+'px '+M}return f};
-    const vfs=Math.min(...tiles.map(t=>fit(t[0],52,30,'800')));
-    const lfs=Math.min(...tiles.map(t=>fit(t[1],23,16,'400')));
-    tiles.forEach(([v,l],i)=>{
-      const x=P+i*(tw+tg);
+    // stat tiles; the lines tile can carry a second, smaller number (git-diff style)
+    const cf=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e5?Math.round(n/1e3)+'k':n>=1e3?(n/1e3).toFixed(1)+'k':String(n);
+    const tiles=[{v:st.total.toLocaleString(),l:'commits'}];
+    if(loc&&loc.adds){
+      // net lines: added minus removed, i.e. roughly how much of this year's code exists now
+      const net=loc.adds-(loc.dels||0);
+      tiles.push({v:(net<0?'\u2212':'')+cf(Math.abs(net)),l:'lines of code'});
+    }
+    if(projects)tiles.push({v:String(projects),l:projects===1?'project':'projects'});
+    tiles.push({v:String(st.active),l:'active days'});
+    if(st.longest>st.cur)tiles.push({v:st.longest+'d',l:'best run'});
+    const tg=16,ty=378,th=140,pad=tiles.length>4?20:24;
+    const totalW=W-2*P-tg*(tiles.length-1),wsum=tiles.reduce((s,t)=>s+(t.w||1),0);
+    tiles.forEach(t=>t.tw=totalW*(t.w||1)/wsum);
+    const sub=f=>Math.round(f*0.6);
+    const vw=(t,f)=>{ctx.font='800 '+f+'px '+M;let w=ctx.measureText(t.v).width;if(t.v2){ctx.font='800 '+sub(f)+'px '+M;w+=12+ctx.measureText(t.v2).width}return w};
+    const fitV=t=>{let f=52;while(vw(t,f)>t.tw-2*pad&&f>28)f--;return f};
+    const fitL=t=>{let f=23;ctx.font='400 '+f+'px '+M;while(ctx.measureText(t.l).width>t.tw-2*pad&&f>16){f--;ctx.font='400 '+f+'px '+M}return f};
+    const vfs=Math.min(...tiles.map(fitV)),lfs=Math.min(...tiles.map(fitL));
+    let tx=P;
+    tiles.forEach(t=>{
+      const x=tx,tw=t.tw;tx+=tw+tg;
       ctx.fillStyle='#171D26';rr(ctx,x,ty,tw,th,18);ctx.fill();
       ctx.strokeStyle='#242E3B';ctx.lineWidth=2;rr(ctx,x,ty,tw,th,18);ctx.stroke();
       ctx.fillStyle='#FF8A2A';rr(ctx,x+pad,ty+22,34,5,2.5);ctx.fill();
-      ctx.font='800 '+vfs+'px '+M;ctx.fillStyle='#E9E4DA';ctx.fillText(v,x+pad,ty+86);
-      ctx.font='400 '+lfs+'px '+M;ctx.fillStyle='#97A0AC';ctx.fillText(l,x+pad,ty+120);
+      ctx.font='800 '+vfs+'px '+M;ctx.fillStyle=t.c||'#E9E4DA';ctx.fillText(t.v,x+pad,ty+86);
+      if(t.v2){const w1=ctx.measureText(t.v).width;ctx.font='800 '+sub(vfs)+'px '+M;ctx.fillStyle=t.c2;ctx.fillText(t.v2,x+pad+w1+12,ty+86)}
+      ctx.font='400 '+lfs+'px '+M;ctx.fillStyle='#97A0AC';ctx.fillText(t.l,x+pad,ty+120);
     });
 
     // heatmap: zoomed to the streak, plus a few weeks of lead-in before it
